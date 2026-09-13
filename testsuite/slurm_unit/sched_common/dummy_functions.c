@@ -377,11 +377,11 @@ int job_limits_check(job_record_t **job_pptr, bool check_min_time)
 void job_end_time_reset(job_record_t *job_ptr)
 {
 	if (job_ptr->time_limit == INFINITE) {
-		job_ptr->end_time = job_ptr->start_time +
-				    (365 * 24 * 60 * 60); /* secs in year */
+		job_record_init_end_time(job_ptr, job_ptr->start_time +
+					 (365 * 24 * 60 * 60)); /* secs/year */
 	} else {
-		job_ptr->end_time = job_ptr->start_time +
-				    (job_ptr->time_limit * 60); /* secs */
+		job_record_init_end_time(job_ptr, job_ptr->start_time +
+					 (job_ptr->time_limit * 60)); /* secs */
 	}
 	job_ptr->end_time_exp = job_ptr->end_time;
 }

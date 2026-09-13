@@ -91,6 +91,42 @@ extern void job_subs_attr_dirty(job_record_t *job_ptr, job_subs_attr_t attr)
 	track->dirty |= JOB_SUBS_BIT(attr);
 }
 
+extern void job_subs_set_priority(job_record_t *job_ptr, uint32_t priority)
+{
+	if (job_ptr->priority == priority)
+		return;
+
+	job_record_init_priority(job_ptr, priority);
+	job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_PRIORITY);
+}
+
+extern void job_subs_set_start_time(job_record_t *job_ptr, time_t start_time)
+{
+	if (job_ptr->start_time == start_time)
+		return;
+
+	job_record_init_start_time(job_ptr, start_time);
+	job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_START_TIME);
+}
+
+extern void job_subs_set_end_time(job_record_t *job_ptr, time_t end_time)
+{
+	if (job_ptr->end_time == end_time)
+		return;
+
+	job_record_init_end_time(job_ptr, end_time);
+	job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_END_TIME);
+}
+
+extern void job_subs_set_exit_code(job_record_t *job_ptr, uint32_t exit_code)
+{
+	if (job_ptr->exit_code == exit_code)
+		return;
+
+	job_record_init_exit_code(job_ptr, exit_code);
+	job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_EXIT_CODE);
+}
+
 /*
  * Find the insertion point for query_id in the sorted membership list.
  * Membership lists are expected to stay short, so a linear scan is fine.

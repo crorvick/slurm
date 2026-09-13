@@ -103,6 +103,7 @@
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/gang.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -2867,12 +2868,12 @@ static int _foreach_kill_job_by_part_name(void *x, void *arg)
 		job_ptr->state_reason = FAIL_DOWN_PARTITION;
 		xfree(job_ptr->state_desc);
 		if (suspended) {
-			job_ptr->end_time = job_ptr->suspend_time;
+			job_subs_set_end_time(job_ptr, job_ptr->suspend_time);
 			job_ptr->tot_sus_time +=
 				difftime(now, job_ptr->suspend_time);
 		} else
-			job_ptr->end_time = now;
-		job_ptr->exit_code = 1;
+			job_subs_set_end_time(job_ptr, now);
+		job_subs_set_exit_code(job_ptr, 1);
 		job_completion_logger(job_ptr, false);
 		if (!pending)
 			deallocate_nodes(job_ptr, false, suspended, false);
@@ -2881,9 +2882,9 @@ static int _foreach_kill_job_by_part_name(void *x, void *arg)
 		info("Killing %pJ on defunct partition %s",
 		     job_ptr, part_ptr->name);
 		job_state_set(job_ptr, JOB_CANCELLED);
-		job_ptr->start_time = now;
-		job_ptr->end_time = now;
-		job_ptr->exit_code = 1;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
+		job_subs_set_exit_code(job_ptr, 1);
 		job_completion_logger(job_ptr, false);
 		fed_mgr_job_complete(job_ptr, 0, now);
 	}
@@ -3076,12 +3077,14 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 			     job_ptr, node_ptr->name);
 			job_ptr->time_last_active = foreach_kill_job_by->now;
 			if (suspended) {
-				job_ptr->end_time = job_ptr->suspend_time;
+				job_subs_set_end_time(job_ptr,
+						      job_ptr->suspend_time);
 				job_ptr->tot_sus_time +=
 					difftime(foreach_kill_job_by->now,
 						 job_ptr->suspend_time);
 			} else
-				job_ptr->end_time = foreach_kill_job_by->now;
+				job_subs_set_end_time(job_ptr,
+						      foreach_kill_job_by->now);
 
 			/*
 			 * We want this job to look like it
@@ -3092,7 +3095,7 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 			job_state_set(job_ptr, JOB_NODE_FAIL);
 			job_ptr->failed_node = xstrdup(node_ptr->name);
 			build_cg_bitmap(job_ptr);
-			job_ptr->exit_code = 1;
+			job_subs_set_exit_code(job_ptr, 1);
 			job_completion_logger(job_ptr, true);
 			deallocate_nodes(job_ptr, false, suspended, false);
 
@@ -3108,7 +3111,7 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 			/* clear signal sent flag on requeue */
 			job_ptr->warn_flags &= ~WARN_SENT;
 
-			job_ptr->exit_code = 0;
+			job_subs_set_exit_code(job_ptr, 0);
 
 			/*
 			 * Since the job completion logger
@@ -3131,13 +3134,15 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 			job_ptr->state_reason = FAIL_DOWN_NODE;
 			xfree(job_ptr->state_desc);
 			if (suspended) {
-				job_ptr->end_time = job_ptr->suspend_time;
+				job_subs_set_end_time(job_ptr,
+						      job_ptr->suspend_time);
 				job_ptr->tot_sus_time +=
 					difftime(foreach_kill_job_by->now,
 						 job_ptr->suspend_time);
 			} else
-				job_ptr->end_time = foreach_kill_job_by->now;
-			job_ptr->exit_code = 1;
+				job_subs_set_end_time(job_ptr,
+						      foreach_kill_job_by->now);
+			job_subs_set_exit_code(job_ptr, 1);
 			job_completion_logger(job_ptr, false);
 			deallocate_nodes(job_ptr, false, suspended, false);
 		}
@@ -4261,10 +4266,11 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 		if (job_ptr && (immediate || will_run)) {
 			/* this should never really happen here */
 			job_state_set(job_ptr, JOB_FAILED);
-			job_ptr->exit_code = 1;
+			job_subs_set_exit_code(job_ptr, 1);
 			job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
 			xfree(job_ptr->state_desc);
-			job_ptr->start_time = job_ptr->end_time = now;
+			job_subs_set_start_time(job_ptr, now);
+			job_subs_set_end_time(job_ptr, now);
 			job_completion_logger(job_ptr, false);
 			error("%s: setting %pJ to \"%s\"",
 			      __func__, job_ptr,
@@ -4314,10 +4320,11 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 	if (immediate &&
 	    (too_fragmented || (!top_prio) || (!independent) || defer_this)) {
 		job_state_set(job_ptr, JOB_FAILED);
-		job_ptr->exit_code  = 1;
+		job_subs_set_exit_code(job_ptr, 1);
 		job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
 		xfree(job_ptr->state_desc);
-		job_ptr->start_time = job_ptr->end_time = now;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		job_completion_logger(job_ptr, false);
 		if (!independent) {
 			debug2("%s: setting %pJ to \"%s\" due to dependency (%s)",
@@ -4353,8 +4360,9 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 		int rc;
 		rc = job_start_data(job_ptr, resp);
 		job_state_set(job_ptr, JOB_FAILED);
-		job_ptr->exit_code  = 1;
-		job_ptr->start_time = job_ptr->end_time = now;
+		job_subs_set_exit_code(job_ptr, 1);
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		purge_job_record(job_ptr->job_id);
 		return rc;
 	}
@@ -4471,10 +4479,11 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 		 */
 		if (immediate) {
 			job_state_set(job_ptr, JOB_FAILED);
-			job_ptr->exit_code  = 1;
+			job_subs_set_exit_code(job_ptr, 1);
 			job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
 			xfree(job_ptr->state_desc);
-			job_ptr->start_time = job_ptr->end_time = now;
+			job_subs_set_start_time(job_ptr, now);
+			job_subs_set_end_time(job_ptr, now);
 			job_completion_logger(job_ptr, false);
 			debug2("%s: setting %pJ to \"%s\" because it cannot be immediately allocated (%s)",
 			       __func__, job_ptr,
@@ -4496,10 +4505,11 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 
 	if (error_code) {	/* fundamental flaw in job request */
 		job_state_set(job_ptr, JOB_FAILED);
-		job_ptr->exit_code  = 1;
+		job_subs_set_exit_code(job_ptr, 1);
 		job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
 		xfree(job_ptr->state_desc);
-		job_ptr->start_time = job_ptr->end_time = now;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		job_completion_logger(job_ptr, false);
 		debug2("%s: setting %pJ to \"%s\" due to a flaw in the job request (%s)",
 		       __func__, job_ptr,
@@ -4510,8 +4520,9 @@ extern int job_allocate(job_desc_msg_t *job_desc, int immediate, int will_run,
 
 	if (will_run) {		/* job would run, flag job destruction */
 		job_state_set(job_ptr, JOB_FAILED);
-		job_ptr->exit_code  = 1;
-		job_ptr->start_time = job_ptr->end_time = now;
+		job_subs_set_exit_code(job_ptr, 1);
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		purge_job_record(job_ptr->job_id);
 	}
 
@@ -4554,14 +4565,14 @@ static int _job_fail(job_record_t *job_ptr, uint32_t job_state)
 		/* No need to signal steps, deallocate kills them */
 		job_ptr->time_last_active       = now;
 		if (suspended) {
-			job_ptr->end_time       = job_ptr->suspend_time;
+			job_subs_set_end_time(job_ptr, job_ptr->suspend_time);
 			job_ptr->tot_sus_time  +=
 				difftime(now, job_ptr->suspend_time);
 		} else
-			job_ptr->end_time       = now;
+			job_subs_set_end_time(job_ptr, now);
 		last_job_update                 = now;
 		job_state_set(job_ptr, (job_state | JOB_COMPLETING));
-		job_ptr->exit_code = 1;
+		job_subs_set_exit_code(job_ptr, 1);
 		job_ptr->state_reason = FAIL_LAUNCH;
 		xfree(job_ptr->state_desc);
 		job_completion_logger(job_ptr, false);
@@ -5322,7 +5333,7 @@ extern int job_signal(job_record_t *job_ptr, uint16_t signal,
 
 	if (IS_JOB_CONFIGURING(job_ptr) && (signal == SIGKILL)) {
 		last_job_update         = now;
-		job_ptr->end_time       = now;
+		job_subs_set_end_time(job_ptr, now);
 		job_state_set(job_ptr, (JOB_CANCELLED | JOB_COMPLETING));
 		if (flags & KILL_FED_REQUEUE)
 			job_state_set_flag(job_ptr, JOB_REQUEUE);
@@ -5343,8 +5354,8 @@ extern int job_signal(job_record_t *job_ptr, uint16_t signal,
 		job_state_set(job_ptr, JOB_CANCELLED);
 		if (flags & KILL_FED_REQUEUE)
 			job_state_set_flag(job_ptr, JOB_REQUEUE);
-		job_ptr->start_time	= now;
-		job_ptr->end_time	= now;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		srun_allocate_abort(job_ptr);
 		slurmscriptd_flush_job(job_ptr->job_id);
 		track_script_flush_job(job_ptr->job_id);
@@ -5373,7 +5384,7 @@ extern int job_signal(job_record_t *job_ptr, uint16_t signal,
 		job_term_state = JOB_CANCELLED;
 	if (IS_JOB_SUSPENDED(job_ptr) && (signal == SIGKILL)) {
 		last_job_update         = now;
-		job_ptr->end_time       = job_ptr->suspend_time;
+		job_subs_set_end_time(job_ptr, job_ptr->suspend_time);
 		job_ptr->tot_sus_time  += difftime(now, job_ptr->suspend_time);
 		job_state_set(job_ptr, (job_term_state | JOB_COMPLETING));
 		if (flags & KILL_FED_REQUEUE)
@@ -5407,7 +5418,7 @@ extern int job_signal(job_record_t *job_ptr, uint16_t signal,
 			/* No need to signal steps, deallocate kills them
 			 */
 			job_ptr->time_last_active	= now;
-			job_ptr->end_time		= now;
+			job_subs_set_end_time(job_ptr, now);
 			last_job_update			= now;
 			job_state_set(job_ptr, (job_term_state |
 						JOB_COMPLETING));
@@ -5590,8 +5601,8 @@ static void _signal_pending_job_array_tasks(job_record_t *job_ptr,
 		if (!new_task_count) {
 			last_job_update		= now;
 			job_state_set(job_ptr, JOB_CANCELLED);
-			job_ptr->start_time	= now;
-			job_ptr->end_time	= now;
+			job_subs_set_start_time(job_ptr, now);
+			job_subs_set_end_time(job_ptr, now);
 			job_ptr->requid		= uid;
 			srun_allocate_abort(job_ptr);
 			job_completion_logger(job_ptr, false);
@@ -6100,7 +6111,7 @@ extern int prolog_complete(prolog_complete_msg_t *msg)
 
 	if (msg->prolog_rc) {
 		error("Prolog launch failure, %pJ", job_ptr);
-		job_ptr->exit_code = msg->prolog_rc;
+		job_subs_set_exit_code(job_ptr, msg->prolog_rc);
 	}
 
 	/*
@@ -6146,7 +6157,7 @@ static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller)
 	job_ptr->state_desc =
 		xstrdup("launch failure limit exceeded requeued held");
 	job_ptr->batch_flag = 1;
-	job_ptr->priority = 0;
+	job_subs_set_priority(job_ptr, 0);
 }
 
 static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
@@ -6165,7 +6176,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 
 	if (IS_JOB_FINISHED(job_ptr)) {
 		if (job_ptr->exit_code == 0)
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 		return ESLURM_ALREADY_DONE;
 	}
 
@@ -6227,7 +6238,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 		 * accounting logs. Set a new submit time so the restarted
 		 * job looks like a new job.
 		 */
-		job_ptr->end_time = now;
+		job_subs_set_end_time(job_ptr, now);
 		if (job_ptr->bit_flags & GRACE_PREEMPT) {
 			job_state_set(job_ptr, (JOB_PREEMPTED | job_comp_flag));
 
@@ -6235,7 +6246,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			job_ptr->bit_flags &= (~GRACE_PREEMPT);
 		} else {
 			job_state_set(job_ptr, JOB_NODE_FAIL);
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 		}
 
 		job_completion_logger(job_ptr, true);
@@ -6265,7 +6276,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 
 
 		job_state_set(job_ptr, (JOB_PENDING | job_comp_flag));
-		job_ptr->exit_code = 0;
+		job_subs_set_exit_code(job_ptr, 0);
 		/*
 		 * Since the job completion logger removes the job submit
 		 * information, we need to add it again.
@@ -6300,7 +6311,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 
 		if (node_fail) {
 			job_state_set(job_ptr, (JOB_NODE_FAIL | job_comp_flag));
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 			job_ptr->requid = uid;
 		} else if (job_ptr->bit_flags & GRACE_PREEMPT) {
 			job_state_set(job_ptr, (JOB_PREEMPTED | job_comp_flag));
@@ -6309,18 +6320,18 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			job_ptr->requid = uid;
 		} else if ((job_return_code & 0xff) == SIG_OOM) {
 			job_state_set(job_ptr, (JOB_OOM | job_comp_flag));
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 			job_ptr->state_reason = FAIL_OOM;
 			xfree(job_ptr->state_desc);
 		} else if (WIFEXITED(job_return_code) &&
 			   WEXITSTATUS(job_return_code)) {
 			job_state_set(job_ptr, (JOB_FAILED | job_comp_flag));
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 			job_ptr->state_reason = FAIL_EXIT_CODE;
 			xfree(job_ptr->state_desc);
 		} else if (WIFSIGNALED(job_return_code)) {
 			job_state_set(job_ptr, (JOB_FAILED | job_comp_flag));
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 			job_ptr->state_reason = FAIL_SIGNAL;
 			xfree(job_ptr->state_desc);
 			xstrfmtcat(job_ptr->state_desc,
@@ -6339,15 +6350,15 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			xfree(job_ptr->state_desc);
 		} else {
 			job_state_set(job_ptr, (JOB_COMPLETE | job_comp_flag));
-			job_ptr->exit_code = job_return_code;
+			job_subs_set_exit_code(job_ptr, job_return_code);
 		}
 
 		if (suspended) {
-			job_ptr->end_time = job_ptr->suspend_time;
+			job_subs_set_end_time(job_ptr, job_ptr->suspend_time);
 			job_ptr->tot_sus_time +=
 				difftime(now, job_ptr->suspend_time);
 		} else
-			job_ptr->end_time = now;
+			job_subs_set_end_time(job_ptr, now);
 		job_completion_logger(job_ptr, false);
 	}
 
@@ -7687,7 +7698,7 @@ static int _job_create(job_desc_msg_t *job_desc, bool allocate, int will_run,
 	 * the priority is not given, we will figure it out later after we see
 	 * if the job is eligible or not. So we want NO_VAL if not set.
 	 */
-	job_ptr->priority = job_desc->priority;
+	job_subs_set_priority(job_ptr, job_desc->priority);
 	if (job_ptr->priority == 0) {
 		if (user_submit_priority == 0)
 			job_ptr->state_reason = WAIT_HELD_USER;
@@ -7699,7 +7710,7 @@ static int _job_create(job_desc_msg_t *job_desc, bool allocate, int will_run,
 	} else if ((job_ptr->priority == INFINITE) &&
 		   (user_submit_priority == INFINITE)) {
 		/* This happens when "hold": false is specified to slurmrestd */
-		job_ptr->priority = NO_VAL;
+		job_subs_set_priority(job_ptr, NO_VAL);
 	}
 
 	/*
@@ -7815,10 +7826,11 @@ static int _job_create(job_desc_msg_t *job_desc, bool allocate, int will_run,
 cleanup_fail:
 	if (job_ptr) {
 		job_state_set(job_ptr, JOB_FAILED);
-		job_ptr->exit_code = 1;
+		job_subs_set_exit_code(job_ptr, 1);
 		job_ptr->state_reason = FAIL_SYSTEM;
 		xfree(job_ptr->state_desc);
-		job_ptr->start_time = job_ptr->end_time = time(NULL);
+		job_subs_set_start_time(job_ptr, time(NULL));
+		job_subs_set_end_time(job_ptr, job_ptr->start_time);
 		purge_job_record(job_ptr->job_id);
 		*job_pptr = NULL;
 	}
@@ -9301,7 +9313,8 @@ static void _job_time_limit_incr(job_record_t *job_ptr, uint32_t boot_job_id)
 			verbose("Extending %pJ time limit by %u secs for configuration",
 				job_ptr, (uint32_t) delta_t);
 		}
-		job_ptr->end_time = now + (job_ptr->time_limit * 60);
+		job_subs_set_end_time(job_ptr,
+				      now + (job_ptr->time_limit * 60));
 		job_ptr->end_time_exp = job_ptr->end_time;
 	}
 }
@@ -9357,7 +9370,7 @@ extern void job_config_fini(job_record_t *job_ptr)
 	if (IS_JOB_POWER_UP_NODE(job_ptr)) {
 		info("Resetting %pJ start time for node power up", job_ptr);
 		job_state_unset_flag(job_ptr, JOB_POWER_UP_NODE);
-		job_ptr->start_time = now;
+		job_subs_set_start_time(job_ptr, now);
 		_het_job_time_limit_incr(job_ptr, job_ptr->job_id);
 		jobacct_storage_g_job_start(acct_db_conn, job_ptr);
 	} else {
@@ -9881,7 +9894,7 @@ static void _job_timed_out(job_record_t *job_ptr, bool preempted)
 	srun_timeout(job_ptr);
 	if (job_ptr->details) {
 		time_t now      = time(NULL);
-		job_ptr->end_time           = now;
+		job_subs_set_end_time(job_ptr, now);
 		job_ptr->time_last_active   = now;
 		if (!job_ptr->preempt_time)
 			job_state_set(job_ptr, (JOB_TIMEOUT | JOB_COMPLETING));
@@ -11771,7 +11784,7 @@ extern void set_job_prio(job_record_t *job_ptr)
 
 	if (IS_JOB_FINISHED(job_ptr))
 		return;
-	job_ptr->priority = priority_g_set(lowest_prio, job_ptr);
+	job_subs_set_priority(job_ptr, priority_g_set(lowest_prio, job_ptr));
 	if ((job_ptr->priority == 0) || (job_ptr->direct_set_prio))
 		return;
 
@@ -12206,7 +12219,7 @@ static void _hold_job_rec(job_record_t *job_ptr, uid_t uid)
 	time_t now = time(NULL);
 
 	job_ptr->direct_set_prio = 1;
-	job_ptr->priority = 0;
+	job_subs_set_priority(job_ptr, 0);
 
 	if (job_ptr->details && (job_ptr->details->begin_time < now))
 		job_ptr->details->begin_time = 0;
@@ -12257,7 +12270,7 @@ static void _release_job_rec(job_record_t *job_ptr, uid_t uid)
 	job_ptr->state_reason = WAIT_NO_REASON;
 	job_state_unset_flag(job_ptr, JOB_SPECIAL_EXIT);
 	xfree(job_ptr->state_desc);
-	job_ptr->exit_code = 0;
+	job_subs_set_exit_code(job_ptr, 0);
 
 	if (job_ptr->licenses && !job_ptr->license_list) {
 		/*
@@ -14060,19 +14073,22 @@ static int _update_job(job_record_t *job_ptr, job_desc_msg_t *job_desc,
 					;	/* Preemption in progress */
 				} else if (job_ptr->time_limit == INFINITE) {
 					/* Set end time in one year */
-					job_ptr->end_time = now +
-						(365 * 24 * 60 * 60);
+					job_subs_set_end_time(
+						job_ptr,
+						now + (365 * 24 * 60 * 60));
 				} else {
 					/*
 					 * Update end_time based upon change
 					 * to preserve suspend time info
 					 */
-					job_ptr->end_time = job_ptr->end_time +
+					job_subs_set_end_time(
+						job_ptr,
+						job_ptr->end_time +
 						((job_ptr->time_limit -
-						  old_time) * 60);
+						  old_time) * 60));
 				}
 				if (job_ptr->end_time < now)
-					job_ptr->end_time = now;
+					job_subs_set_end_time(job_ptr, now);
 				job_ptr->end_time_exp = job_ptr->end_time;
 			}
 			sched_info("%s: setting time_limit to %u for %pJ",
@@ -14131,7 +14147,7 @@ static int _update_job(job_record_t *job_ptr, job_desc_msg_t *job_desc,
 		} else if (privileged ||
 			   (job_ptr->end_time > job_desc->end_time)) {
 			int delta_t  = job_desc->end_time - job_ptr->end_time;
-			job_ptr->end_time = job_desc->end_time;
+			job_subs_set_end_time(job_ptr, job_desc->end_time);
 			job_ptr->time_limit += (delta_t+30)/60; /* Sec->min */
 			sched_info("%s: setting time_limit to %u for %pJ",
 				   __func__, job_ptr->time_limit, job_ptr);
@@ -14234,7 +14250,8 @@ static int _update_job(job_record_t *job_ptr, job_desc_msg_t *job_desc,
 					job_ptr->direct_set_prio = 1;
 				} else
 					error_code = ESLURM_PRIO_RESET_FAIL;
-				job_ptr->priority = job_desc->priority;
+				job_subs_set_priority(job_ptr,
+						      job_desc->priority);
 				if (job_ptr->part_ptr_list &&
 				    job_ptr->prio_mult &&
 				    job_ptr->prio_mult->priority_array) {
@@ -14310,7 +14327,8 @@ static int _update_job(job_record_t *job_ptr, job_desc_msg_t *job_desc,
 				int64_t new_prio = job_ptr->priority;
 				new_prio += job_ptr->details->nice;
 				new_prio -= job_desc->nice;
-				job_ptr->priority = MAX(new_prio, 2);
+				job_subs_set_priority(job_ptr,
+						      MAX(new_prio, 2));
 				sched_info("%s: nice changed from %u to %u, setting priority to %u for %pJ",
 					   __func__, job_ptr->details->nice,
 					   job_desc->nice,
@@ -16620,10 +16638,11 @@ static int _test_state_dir_flag(void *x, void *arg)
 
 	error("Script for %pJ lost, state set to FAILED", job_ptr);
 	job_state_set(job_ptr, JOB_FAILED);
-	job_ptr->exit_code = 1;
+	job_subs_set_exit_code(job_ptr, 1);
 	job_ptr->state_reason = FAIL_SYSTEM;
 	xfree(job_ptr->state_desc);
-	job_ptr->start_time = job_ptr->end_time = time(NULL);
+	job_subs_set_start_time(job_ptr, time(NULL));
+	job_subs_set_end_time(job_ptr, job_ptr->start_time);
 	job_completion_logger(job_ptr, false);
 	return 0;
 }
@@ -16895,7 +16914,7 @@ void batch_requeue_fini(job_record_t *job_ptr)
 				xstrdup("job requeued in held state");
 			sched_info("%s: holding expedited requeue %pJ as no epilogs failed",
 				   __func__, job_ptr);
-			job_ptr->priority = 0;
+			job_subs_set_priority(job_ptr, 0);
 		}
 	}
 
@@ -16903,8 +16922,9 @@ void batch_requeue_fini(job_record_t *job_ptr)
 
 	/* Clear everything so this appears to be a new job and then restart
 	 * it in accounting. */
-	job_ptr->start_time = 0;
-	job_ptr->end_time_exp = job_ptr->end_time = 0;
+	job_subs_set_start_time(job_ptr, 0);
+	job_subs_set_end_time(job_ptr, 0);
+	job_ptr->end_time_exp = 0;
 	job_ptr->total_cpus = 0;
 	job_ptr->pre_sus_time = 0;
 	job_ptr->preempt_time = 0;
@@ -17647,7 +17667,8 @@ static int _job_suspend_op(job_record_t *job_ptr, uint16_t op, bool indf_susp)
 		if (IS_JOB_SUSPENDED(job_ptr) && indf_susp) {
 			debug("%s: Holding %pJ, re-suspend operation",
 			      __func__, job_ptr);
-			job_ptr->priority = 0;	/* Prevent gang sched resume */
+			/* Prevent gang sched resume */
+			job_subs_set_priority(job_ptr, 0);
 			return SLURM_SUCCESS;
 		}
 		if (!IS_JOB_RUNNING(job_ptr))
@@ -17660,7 +17681,7 @@ static int _job_suspend_op(job_record_t *job_ptr, uint16_t op, bool indf_susp)
 		if (indf_susp) {    /* Job being manually suspended, not gang */
 			debug("%s: Holding %pJ, suspend operation",
 			      __func__, job_ptr);
-			job_ptr->priority = 0;
+			job_subs_set_priority(job_ptr, 0);
 			(void) gs_job_fini(job_ptr);
 		}
 		if (job_ptr->suspend_time) {
@@ -17690,9 +17711,11 @@ static int _job_suspend_op(job_record_t *job_ptr, uint16_t op, bool indf_susp)
 		if ((job_ptr->time_limit != INFINITE) &&
 		    (!job_ptr->preempt_time)) {
 			debug3("%pJ resumed, updating end_time", job_ptr);
-			job_ptr->end_time_exp = job_ptr->end_time =
-				now + (job_ptr->time_limit * 60)
-				- job_ptr->pre_sus_time;
+			job_subs_set_end_time(job_ptr,
+					      now +
+					      (job_ptr->time_limit * 60) -
+					      job_ptr->pre_sus_time);
+			job_ptr->end_time_exp = job_ptr->end_time;
 		}
 		resume_job_step(job_ptr);
 	}
@@ -18057,9 +18080,9 @@ static int _job_requeue_op(uid_t uid, job_record_t *job_ptr, bool preempt,
 
 	job_ptr->time_last_active  = now;
 	if (is_suspended)
-		job_ptr->end_time = job_ptr->suspend_time;
+		job_subs_set_end_time(job_ptr, job_ptr->suspend_time);
 	else if (!is_completing)
-		job_ptr->end_time = now;
+		job_subs_set_end_time(job_ptr, now);
 
 	/*
 	 * Save the state of the job so that
@@ -18174,14 +18197,14 @@ reply:
 		job_ptr->state_desc =
 			xstrdup("job requeued in special exit state");
 		debug("%s: Holding %pJ, special exit", __func__, job_ptr);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 	}
 	if (flags & JOB_REQUEUE_HOLD) {
 		job_ptr->state_reason = WAIT_HELD_USER;
 		xfree(job_ptr->state_desc);
 		job_ptr->state_desc = xstrdup("job requeued in held state");
 		debug("%s: Holding %pJ, requeue-hold exit", __func__, job_ptr);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 	}
 	if (flags & JOB_LAUNCH_FAILED) {
 		job_ptr->batch_flag++;
@@ -18203,7 +18226,7 @@ reply:
 				debug("%s: Holding %pJ due to prolog failure",
 				      __func__, job_ptr);
 			}
-			job_ptr->priority = 0;
+			job_subs_set_priority(job_ptr, 0);
 		}
 	}
 
@@ -18572,7 +18595,7 @@ static int _set_top(list_t *top_job_list, uid_t uid)
 		delta_prio = (int64_t) next_prio - job_ptr->priority;
 		delta_nice = MIN(job_ptr->details->nice, delta_prio);
 		total_delta += delta_nice;
-		job_ptr->priority = next_prio;
+		job_subs_set_priority(job_ptr, next_prio);
 		job_ptr->details->nice -= delta_nice;
 		job_ptr->bit_flags &= (~TOP_PRIO_TMP);
 	}
@@ -18590,7 +18613,7 @@ static int _set_top(list_t *top_job_list, uid_t uid)
 				delta_prio = job_ptr->priority - next_prio;
 			}
 			delta_nice = delta_prio;
-			job_ptr->priority = next_prio;
+			job_subs_set_priority(job_ptr, next_prio);
 			job_ptr->details->nice += delta_nice;
 			job_ptr->bit_flags &= (~TOP_PRIO_TMP);
 			total_delta -= delta_nice;
@@ -19209,7 +19232,7 @@ extern bool job_hold_requeue(job_record_t *job_ptr)
 		job_state_set_flag(job_ptr, JOB_SPECIAL_EXIT);
 		job_ptr->state_reason = WAIT_HELD_USER;
 		debug("%s: Holding %pJ, special exit", __func__, job_ptr);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 	}
 
 	job_state_unset_flag(job_ptr, JOB_REQUEUE);
@@ -19373,11 +19396,11 @@ extern void job_end_time_reset(job_record_t *job_ptr)
 	if (job_ptr->preempt_time)
 		return; /* Preemption in progress */
 	if (job_ptr->time_limit == INFINITE) {
-		job_ptr->end_time = job_ptr->start_time +
-			(365 * 24 * 60 * 60); /* secs in year */
+		job_subs_set_end_time(job_ptr, job_ptr->start_time +
+				      (365 * 24 * 60 * 60)); /* secs in year */
 	} else {
-		job_ptr->end_time = job_ptr->start_time +
-			(job_ptr->time_limit * 60);	/* secs */
+		job_subs_set_end_time(job_ptr, job_ptr->start_time +
+				      (job_ptr->time_limit * 60)); /* secs */
 	}
 	job_ptr->end_time_exp = job_ptr->end_time;
 }
@@ -19439,7 +19462,7 @@ extern job_record_t *job_array_post_sched(job_record_t *job_ptr, bool list_add)
 	} else {
 		new_job_ptr = job_array_split(job_ptr, list_add);
 		job_state_set(new_job_ptr, JOB_PENDING);
-		new_job_ptr->start_time = (time_t) 0;
+		job_subs_set_start_time(new_job_ptr, (time_t) 0);
 	}
 
 	return new_job_ptr;
@@ -19457,8 +19480,8 @@ static void _kill_dependent(job_record_t *job_ptr)
 	info("%s: Job dependency can't be satisfied, cancelling %pJ",
 	     __func__, job_ptr);
 	job_state_set(job_ptr, JOB_CANCELLED);
-	job_ptr->start_time = now;
-	job_ptr->end_time = now;
+	job_subs_set_start_time(job_ptr, now);
+	job_subs_set_end_time(job_ptr, now);
 	job_completion_logger(job_ptr, false);
 	last_job_update = now;
 	srun_allocate_abort(job_ptr);
@@ -20074,7 +20097,7 @@ extern void job_mgr_handle_cred_failure(job_record_t *job_ptr)
 {
 	slurm_step_id_t step_id = STEP_ID_FROM_JOB_RECORD(job_ptr);
 
-	job_ptr->priority = 0; /* Hold job */
+	job_subs_set_priority(job_ptr, 0); /* Hold job */
 	xfree(job_ptr->system_comment);
 	job_ptr->system_comment =
 		xstrdup("slurm_cred_create failure, holding job.");

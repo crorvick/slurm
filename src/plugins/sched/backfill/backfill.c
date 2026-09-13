@@ -86,6 +86,7 @@
 #include "src/slurmctld/acct_policy.h"
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -300,8 +301,9 @@ static void _dump_job_sched(job_record_t *job_ptr, time_t end_time,
 			    bitstr_t *avail_bitmap)
 {
 	char begin_buf[256], end_buf[256], *node_list;
+	time_t start_time = job_ptr->start_time;
 
-	slurm_make_time_str(&job_ptr->start_time, begin_buf, sizeof(begin_buf));
+	slurm_make_time_str(&start_time, begin_buf, sizeof(begin_buf));
 	slurm_make_time_str(&end_time, end_buf, sizeof(end_buf));
 	node_list = bitmap2node_name(avail_bitmap);
 	log_flag(BACKFILL, "%pJ to start at %s, end at %s on nodes %s in partition %s",
@@ -548,12 +550,12 @@ static int  _try_sched(job_record_t *job_ptr, bitstr_t **avail_bitmap,
 		FREE_NULL_LIST(preemptee_candidates);
 		FREE_NULL_BITMAP(tmp_bitmap);
 		if (high_start && rc == SLURM_SUCCESS) {
-			job_ptr->start_time = high_start;
+			job_subs_set_start_time(job_ptr, high_start);
 			FREE_NULL_BITMAP(*avail_bitmap);
 			*avail_bitmap = low_bitmap;
 		} else {
 			rc = ESLURM_NODES_BUSY;
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			FREE_NULL_BITMAP(*avail_bitmap);
 			FREE_NULL_BITMAP(low_bitmap);
 		}
@@ -614,7 +616,7 @@ static int  _try_sched(job_record_t *job_ptr, bitstr_t **avail_bitmap,
 		FREE_NULL_LIST(preemptee_candidates);
 		FREE_NULL_BITMAP(tmp_bitmap);
 		if (low_start) {
-			job_ptr->start_time = low_start;
+			job_subs_set_start_time(job_ptr, low_start);
 			rc = SLURM_SUCCESS;
 			FREE_NULL_BITMAP(*avail_bitmap);
 			*avail_bitmap = low_bitmap;
@@ -1226,7 +1228,7 @@ static int _clear_job_estimates(void *x, void *arg)
 {
 	job_record_t *job_ptr = (job_record_t *) x;
 	if (IS_JOB_PENDING(job_ptr)) {
-		job_ptr->start_time = 0;
+		job_subs_set_start_time(job_ptr, 0);
 		xfree(job_ptr->sched_nodes);
 	}
 	return SLURM_SUCCESS;
@@ -2200,7 +2202,7 @@ static void _set_backfill_timelimits(uint32_t deadline_time_limit,
 	if (later_start && !job_no_reserve) {				\
 		log_flag(BACKFILL, "Try later %pJ later_start %ld",	\
 			 job_ptr, later_start);				\
-		job_ptr->start_time = 0;				\
+		job_subs_set_start_time(job_ptr, 0);			\
 		goto TRY_LATER;						\
 	}								\
 	/*								\
@@ -2210,7 +2212,7 @@ static void _set_backfill_timelimits(uint32_t deadline_time_limit,
 	 */								\
 	log_flag(BACKFILL, "Can't schedule %pJ in partition %s",	\
 		 job_ptr, job_ptr->part_ptr->name);			\
-	job_ptr->start_time = orig_start_time;				\
+	job_subs_set_start_time(job_ptr, orig_start_time);		\
 	continue;	/* not runnable in this partition */		\
 }
 
@@ -2420,7 +2422,8 @@ static void _attempt_backfill(void)
 			 * array.
 			 */
 			if (job_ptr->array_recs && array_start_time)
-				job_ptr->start_time = array_start_time;
+				job_subs_set_start_time(job_ptr,
+							array_start_time);
 		}
 		array_start_time = 0;
 		xfree(job_queue_rec);
@@ -2554,7 +2557,7 @@ static void _attempt_backfill(void)
 		 * is set in that case.
 		 */
 		if (!job_ptr->direct_set_prio)
-			job_ptr->priority = bf_job_priority;
+			job_subs_set_priority(job_ptr, bf_job_priority);
 		job_ptr->qos_ptr = qos_ptr;
 		if (qos_ptr)
 			job_ptr->qos_id = qos_ptr->id;
@@ -3291,7 +3294,7 @@ later_start_set:
 		}
 
 		if (start_res > job_ptr->start_time) {
-			job_ptr->start_time = start_res;
+			job_subs_set_start_time(job_ptr, start_res);
 			last_job_update = now;
 		}
 
@@ -3309,7 +3312,7 @@ later_start_set:
 					log_flag(BACKFILL, "%pJ inf loop detect", job_ptr);
 				}
 
-				job_ptr->start_time = 0;
+				job_subs_set_start_time(job_ptr, 0);
 				log_flag(BACKFILL, "%pJ overlaps with existing reservation start_time=%u end_reserve=%u boot_time=%u later_start %ld",
 					 job_ptr, start_time, end_reserve,
 					 boot_time, later_start);
@@ -3338,7 +3341,7 @@ later_start_set:
 		    (bit_overlap_any(avail_bitmap, cg_node_bitmap) ||
 		     bit_overlap_any(avail_bitmap, rs_node_bitmap))) {
 			/* Need to wait for in-progress completion/epilog */
-			job_ptr->start_time = now + 1;
+			job_subs_set_start_time(job_ptr, now + 1);
 			later_start = 0;
 		}
 		if ((job_ptr->start_time <= now) &&
@@ -3364,7 +3367,7 @@ later_start_set:
 				 * Cannot start now, set start time in the
 				 * future.
 				 */
-				job_ptr->start_time = now + 1;
+				job_subs_set_start_time(job_ptr, now + 1);
 			}
 			sched_debug3("%pJ. State=%s. Reason=%s. Priority=%u.",
 				     job_ptr,
@@ -3388,8 +3391,9 @@ later_start_set:
 				 * able to start stage-in for any other jobs in
 				 * this array.
 				 */
-				job_ptr->start_time =
-					bb_g_job_get_est_start(job_ptr);
+				job_subs_set_start_time(
+					job_ptr,
+					bb_g_job_get_est_start(job_ptr));
 				reject_array_job = NULL;
 				reject_array_part = NULL;
 				reject_array_qos = NULL;
@@ -3476,8 +3480,9 @@ skip_start:
 					hard_limit = YEAR_SECONDS;
 				else
 					hard_limit = job_ptr->time_limit * 60;
-				job_ptr->end_time = job_ptr->start_time +
-						    hard_limit;
+				job_subs_set_end_time(job_ptr,
+						      job_ptr->start_time +
+						      hard_limit);
 				/*
 				 * Only set if start_time. end_time must be set
 				 * beforehand for _reset_job_time_limit.
@@ -3499,7 +3504,8 @@ skip_start:
 			    ((rc == ESLURM_REQUESTED_NODE_CONFIG_UNAVAILABLE) &&
 			     job_ptr->extra_constraints)) {
 				/* Unknown future start time, just skip job */
-				job_ptr->start_time = orig_start_time;
+				job_subs_set_start_time(job_ptr,
+							orig_start_time);
 				_set_job_time_limit(job_ptr, orig_time_limit);
 				continue;
 			} else if (rc == ESLURM_ACCOUNTING_POLICY) {
@@ -3512,9 +3518,11 @@ skip_start:
 				 * after the next job ends (or in 5 minutes if
 				 * we don't have that information yet). */
 				if (later_start)
-					job_ptr->start_time = later_start;
+					job_subs_set_start_time(job_ptr,
+								later_start);
 				else
-					job_ptr->start_time = now + 500;
+					job_subs_set_start_time(job_ptr,
+								now + 500);
 				if (job_ptr->qos_blocking_ptr &&
 				    job_state_reason_check(
 					    job_ptr->state_reason,
@@ -3606,7 +3614,8 @@ skip_start:
 			if ((orig_start_time != 0) &&
 			    (orig_start_time < job_ptr->start_time)) {
 				/* Can start earlier in different partition */
-				job_ptr->start_time = orig_start_time;
+				job_subs_set_start_time(job_ptr,
+							orig_start_time);
 			} else {
 				log_flag(BACKFILL, "%pJ StartTime set but no backfill reservation created.",
 					 job_ptr);
@@ -3620,7 +3629,7 @@ skip_start:
 			 * pending jobs are free */
 			log_flag(BACKFILL, "Try later %pJ later_start %ld",
 			         job_ptr, later_start);
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			goto TRY_LATER;
 		}
 
@@ -3640,7 +3649,8 @@ skip_start:
 			if ((orig_start_time != 0) &&
 			    (orig_start_time < job_ptr->start_time)) {
 				/* Can start earlier in different partition */
-				job_ptr->start_time = orig_start_time;
+				job_subs_set_start_time(job_ptr,
+							orig_start_time);
 			} else {
 				log_flag(BACKFILL, "%pJ StartTime set to time after current backfill window. No reservation created",
 					 job_ptr);
@@ -3658,7 +3668,7 @@ skip_start:
 			 * job to be backfill scheduled, which the sched
 			 * plugin does not know about. Try again later. */
 			later_start = job_ptr->start_time;
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			log_flag(BACKFILL, "%pJ after defer overlaps with existing reservation start_time=%u end_reserve=%u boot_time=%u later_start %ld",
 				 job_ptr, start_time, end_reserve, boot_time,
 				 later_start);
@@ -3790,7 +3800,7 @@ skip_start:
 		if ((orig_start_time != 0) &&
 		    (orig_start_time < job_ptr->start_time)) {
 			/* Can start earlier in different partition */
-			job_ptr->start_time = orig_start_time;
+			job_subs_set_start_time(job_ptr, orig_start_time);
 		}
 		_set_job_time_limit(job_ptr, orig_time_limit);
 		if (job_ptr->array_recs) {
@@ -3834,7 +3844,7 @@ skip_start:
 		job_resv_clear_magnetic_flag(job_ptr);
 
 		if (job_ptr->array_recs && array_start_time)
-			job_ptr->start_time = array_start_time;
+			job_subs_set_start_time(job_ptr, array_start_time);
 	}
 
 	_het_job_deadlock_fini();
@@ -4032,7 +4042,8 @@ static void _reset_job_time_limit(job_record_t *job_ptr, time_t now,
 	new_time_limit = MAX(job_ptr->time_min, job_ptr->time_limit);
 	acct_policy_alter_job(job_ptr, new_time_limit);
 	job_ptr->time_limit = new_time_limit;
-	job_ptr->end_time = job_ptr->start_time + (job_ptr->time_limit * 60);
+	job_subs_set_end_time(job_ptr,
+			      job_ptr->start_time + (job_ptr->time_limit * 60));
 
 	job_time_adj_resv(job_ptr);
 
@@ -4599,11 +4610,11 @@ static bool _het_job_limit_check(het_job_map_t *map, time_t now)
 			uint32_t job_state = job_ptr->job_state;
 			/* Simulate normal job completion */
 			job_ptr->end_time_exp = now;
-			job_ptr->end_time = job_ptr->start_time;
+			job_subs_set_end_time(job_ptr, job_ptr->start_time);
 			job_state_set(job_ptr, (JOB_COMPLETE | JOB_COMPLETING));
 			acct_policy_job_fini(job_ptr, false);
 			job_ptr->end_time_exp = end_time_exp;
-			job_ptr->end_time = end_time;
+			job_subs_set_end_time(job_ptr, end_time);
 			job_state_set(job_ptr, job_state);
 			xfree(job_ptr->tres_alloc_cnt);
 			job_ptr->tres_alloc_cnt = tres_alloc_save[fini_jobs++];
@@ -4703,7 +4714,8 @@ static int _het_job_start_now(het_job_map_t *map, node_space_map_t *node_space)
 				hard_limit = YEAR_SECONDS;
 			else
 				hard_limit = job_ptr->time_limit * 60;
-			job_ptr->end_time = job_ptr->start_time + hard_limit;
+			job_subs_set_end_time(job_ptr,
+					      job_ptr->start_time + hard_limit);
 			/*
 			 * Only set if start_time. end_time must be set
 			 * beforehand for _reset_job_time_limit.
@@ -4741,7 +4753,7 @@ static void _het_job_kill_now(het_job_map_t *map)
 		log_flag(HETJOB, "Deallocate %pJ due to hetjob start failure",
 			 job_ptr);
 		job_ptr->details->begin_time = now + cred_lifetime + 1;
-		job_ptr->end_time   = now;
+		job_subs_set_end_time(job_ptr, now);
 		job_state_set(job_ptr, (JOB_PENDING | JOB_COMPLETING));
 		last_job_update     = now;
 		build_cg_bitmap(job_ptr);

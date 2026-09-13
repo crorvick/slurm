@@ -35,6 +35,7 @@
 
 #include "src/common/macros.h"
 
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/slurmctld.h"
 
@@ -81,6 +82,9 @@ extern void slurm_job_state_set(job_record_t *job_ptr, uint32_t state,
 
 	slurm_on_job_state_change(job_ptr, state, caller);
 
+	if (job_ptr->job_state != state)
+		job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_STATE);
+
 	job_ptr->job_state = state;
 }
 
@@ -98,6 +102,9 @@ extern void slurm_job_state_set_flag(job_record_t *job_ptr, uint32_t flag,
 
 	slurm_on_job_state_change(job_ptr, job_state, caller);
 
+	if (job_ptr->job_state != job_state)
+		job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_STATE);
+
 	job_ptr->job_state = job_state;
 }
 
@@ -114,6 +121,9 @@ extern void slurm_job_state_unset_flag(job_record_t *job_ptr, uint32_t flag,
 	_log_job_state_change(job_ptr, job_state, caller);
 
 	slurm_on_job_state_change(job_ptr, job_state, caller);
+
+	if (job_ptr->job_state != job_state)
+		job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_STATE);
 
 	job_ptr->job_state = job_state;
 }

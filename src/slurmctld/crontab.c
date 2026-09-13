@@ -47,6 +47,7 @@
 #include "src/common/xmalloc.h"
 #include "src/common/xstring.h"
 
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/slurmctld.h"
 
 typedef struct {
@@ -180,9 +181,9 @@ static int _clear_requeue_cron(void *x, void *y)
 		if (!IS_JOB_RUNNING(job_ptr)) {
 			time_t now = time(NULL);
 			job_state_set(job_ptr, JOB_CANCELLED);
-			job_ptr->start_time = now;
-			job_ptr->end_time = now;
-			job_ptr->exit_code = 1;
+			job_subs_set_start_time(job_ptr, now);
+			job_subs_set_end_time(job_ptr, now);
+			job_subs_set_exit_code(job_ptr, 1);
 			job_completion_logger(job_ptr, false);
 		}
 	}

@@ -218,7 +218,7 @@ job_record_t *__add_job(uint32_t job_id, uint32_t priority, uint32_t nodes,
 
 	job_record_t *job_ptr = job_record_create();
 
-	job_ptr->priority = priority;
+	job_record_init_priority(job_ptr, priority);
 	job_ptr->job_id = job_id;
 	job_ptr->partition = xstrdup("test");
 	job_ptr->part_ptr = find_part_record("test");

@@ -83,6 +83,7 @@
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/gang.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -1087,7 +1088,7 @@ static void _abort_job(job_record_t *job_ptr, uint32_t job_state,
 
 	job_state_set(job_ptr, (job_state | JOB_COMPLETING));
 	build_cg_bitmap(job_ptr);
-	job_ptr->end_time = MIN(job_ptr->end_time, now);
+	job_subs_set_end_time(job_ptr, MIN(job_ptr->end_time, now));
 	job_ptr->state_reason = state_reason;
 	xfree(job_ptr->state_desc);
 	job_ptr->state_desc = xstrdup(reason_string);
@@ -1505,17 +1506,19 @@ void _sync_jobs_to_conf(void)
 		if (job_fail) {
 			bool was_running = false;
 			if (IS_JOB_PENDING(job_ptr)) {
-				job_ptr->start_time =
-					job_ptr->end_time = time(NULL);
+				job_subs_set_start_time(job_ptr, time(NULL));
+				job_subs_set_end_time(job_ptr,
+						      job_ptr->start_time);
 				job_state_set(job_ptr, JOB_NODE_FAIL);
 			} else if (IS_JOB_RUNNING(job_ptr)) {
-				job_ptr->end_time = time(NULL);
+				job_subs_set_end_time(job_ptr, time(NULL));
 				job_state_set(job_ptr, (JOB_NODE_FAIL |
 							JOB_COMPLETING));
 				build_cg_bitmap(job_ptr);
 				was_running = true;
 			} else if (IS_JOB_SUSPENDED(job_ptr)) {
-				job_ptr->end_time = job_ptr->suspend_time;
+				job_subs_set_end_time(job_ptr,
+						      job_ptr->suspend_time);
 				job_state_set(job_ptr, (JOB_NODE_FAIL |
 							JOB_COMPLETING));
 				build_cg_bitmap(job_ptr);
@@ -1530,7 +1533,7 @@ void _sync_jobs_to_conf(void)
 			else
 				job_ptr->state_reason = FAIL_DOWN_NODE;
 			xfree(job_ptr->state_desc);
-			job_ptr->exit_code = 1;
+			job_subs_set_exit_code(job_ptr, 1);
 			job_completion_logger(job_ptr, false);
 			if (job_ptr->job_state == JOB_NODE_FAIL) {
 				/* build_cg_bitmap() may clear JOB_COMPLETING */
@@ -1551,7 +1554,7 @@ void _sync_jobs_to_conf(void)
 				job_ptr->node_cnt = bit_set_count(
 					job_ptr->node_bitmap_cg);
 				/* Reset exit code from last run */
-				job_ptr->exit_code = 0;
+				job_subs_set_exit_code(job_ptr, 0);
 			}
 		}
 	}
@@ -2359,7 +2362,7 @@ static int _sync_nodes_to_active_job(job_record_t *job_ptr)
 		} else if (IS_NODE_DOWN(node_ptr) && IS_JOB_RUNNING(job_ptr)) {
 			info("Killing %pJ on DOWN node %s",
 			     job_ptr, node_ptr->name);
-			job_ptr->exit_code = 1;
+			job_subs_set_exit_code(job_ptr, 1);
 			_abort_job(job_ptr, JOB_NODE_FAIL, FAIL_DOWN_NODE,
 				   NULL);
 			cnt++;
@@ -2423,7 +2426,7 @@ extern void restore_job_licenses(job_record_t *job_ptr, bool validate)
 			job_ptr->licenses);
 
 		info("%pJ %s", job_ptr, msg);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 		job_ptr->state_reason = WAIT_HELD;
 		xfree(job_ptr->state_desc);
 		job_ptr->state_desc = msg;

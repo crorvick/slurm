@@ -81,6 +81,7 @@
 #include "src/slurmctld/agent.h"
 #include "src/slurmctld/gang.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/node_scheduler.h"
 #include "src/slurmctld/power_save.h"
@@ -2216,7 +2217,7 @@ static void _end_null_job(job_record_t *job_ptr)
 {
 	time_t now = time(NULL);
 
-	job_ptr->exit_code = 0;
+	job_subs_set_exit_code(job_ptr, 0);
 	gres_stepmgr_job_clear_alloc(job_ptr->gres_list_req);
 	gres_stepmgr_job_clear_alloc(job_ptr->gres_list_req_accum);
 	FREE_NULL_LIST(job_ptr->gres_list_alloc);
@@ -2225,7 +2226,7 @@ static void _end_null_job(job_record_t *job_ptr)
 	FREE_NULL_BITMAP(job_ptr->node_bitmap);
 	xfree(job_ptr->nodes);
 	xfree(job_ptr->sched_nodes);
-	job_ptr->start_time = now;
+	job_subs_set_start_time(job_ptr, now);
 	job_ptr->state_reason = WAIT_NO_REASON;
 	xfree(job_ptr->state_desc);
 	job_ptr->time_last_active = now;
@@ -2253,7 +2254,7 @@ static void _end_null_job(job_record_t *job_ptr)
 	jobcomp_g_record_job_start(job_ptr);
 	prolog_slurmctld(job_ptr);
 
-	job_ptr->end_time = now;
+	job_subs_set_end_time(job_ptr, now);
 	job_state_set(job_ptr, JOB_COMPLETE);
 	job_completion_logger(job_ptr, false);
 	acct_policy_job_fini(job_ptr, false);
@@ -2385,9 +2386,9 @@ static int _get_resv_mpi_ports(job_record_t *job_ptr,
 			* since select plugin failed to set job resources
 			*/
 			error_code = ESLURM_NODES_BUSY;
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			job_ptr->time_last_active = 0;
-			job_ptr->end_time = 0;
+			job_subs_set_end_time(job_ptr, 0);
 			job_ptr->state_reason = WAIT_RESOURCES;
 			last_job_update = now;
 			xfree(job_ptr->state_desc);
@@ -2454,9 +2455,9 @@ static int _get_resv_mpi_ports(job_record_t *job_ptr,
 	    (job_ptr->resv_port_cnt != 0)) {
 		error_code = resv_port_job_alloc(job_ptr);
 		if (error_code) {
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			job_ptr->time_last_active = 0;
-			job_ptr->end_time = 0;
+			job_subs_set_end_time(job_ptr, 0);
 			job_ptr->state_reason = WAIT_MPI_PORTS_BUSY;
 			last_job_update = now;
 			xfree(job_ptr->state_desc);
@@ -2898,7 +2899,7 @@ extern int select_nodes(job_node_select_t *job_node_select,
 	FREE_NULL_BITMAP(job_ptr->node_bitmap);
 	xfree(job_ptr->nodes);
 	xfree(job_ptr->sched_nodes);
-	job_ptr->exit_code = 0;
+	job_subs_set_exit_code(job_ptr, 0);
 	gres_stepmgr_job_clear_alloc(job_ptr->gres_list_req);
 	gres_stepmgr_job_clear_alloc(job_ptr->gres_list_req_accum);
 	FREE_NULL_LIST(job_ptr->gres_list_alloc);
@@ -2916,7 +2917,8 @@ extern int select_nodes(job_node_select_t *job_node_select,
 	 * we need to have these times set to know when the endtime
 	 * is for the job when we place it
 	 */
-	job_ptr->start_time = job_ptr->time_last_active = now;
+	job_ptr->time_last_active = now;
+	job_subs_set_start_time(job_ptr, now);
 	if ((job_ptr->limit_set.time != ADMIN_SET_LIMIT) &&
 	    ((job_ptr->time_limit == NO_VAL) ||
 	     ((job_ptr->time_limit > part_ptr->max_time) &&
@@ -2945,10 +2947,10 @@ extern int select_nodes(job_node_select_t *job_node_select,
 		error_code = ESLURM_INVALID_BURST_BUFFER_REQUEST;
 		error("bb_g_job_begin(%pJ): %s",
 		      job_ptr, slurm_strerror(error_code));
-		job_ptr->start_time = 0;
+		job_subs_set_start_time(job_ptr, 0);
 		job_ptr->time_last_active = 0;
-		job_ptr->end_time = 0;
-		job_ptr->priority = 0;
+		job_subs_set_end_time(job_ptr, 0);
+		job_subs_set_priority(job_ptr, 0);
 		job_ptr->state_reason = WAIT_HELD;
 		last_job_update = now;
 		goto cleanup;
@@ -2961,9 +2963,9 @@ extern int select_nodes(job_node_select_t *job_node_select,
 		(void) bb_g_job_revoke_alloc(job_ptr);
 
 		error_code = ESLURM_NODES_BUSY;
-		job_ptr->start_time = 0;
+		job_subs_set_start_time(job_ptr, 0);
 		job_ptr->time_last_active = 0;
-		job_ptr->end_time = 0;
+		job_subs_set_end_time(job_ptr, 0);
 		job_ptr->state_reason = WAIT_RESOURCES;
 		last_job_update = now;
 		goto cleanup;
@@ -2984,9 +2986,9 @@ extern int select_nodes(job_node_select_t *job_node_select,
 		(void) bb_g_job_revoke_alloc(job_ptr);
 
 		error_code = ESLURM_NODES_BUSY;
-		job_ptr->start_time = 0;
+		job_subs_set_start_time(job_ptr, 0);
 		job_ptr->time_last_active = 0;
-		job_ptr->end_time = 0;
+		job_subs_set_end_time(job_ptr, 0);
 		job_ptr->state_reason = WAIT_RESOURCES;
 		last_job_update = now;
 		goto cleanup;
@@ -3011,9 +3013,9 @@ extern int select_nodes(job_node_select_t *job_node_select,
 			(void) bb_g_job_revoke_alloc(job_ptr);
 
 			error_code = ESLURM_NODES_BUSY;
-			job_ptr->start_time = 0;
+			job_subs_set_start_time(job_ptr, 0);
 			job_ptr->time_last_active = 0;
-			job_ptr->end_time = 0;
+			job_subs_set_end_time(job_ptr, 0);
 			job_ptr->state_reason = WAIT_RESOURCES;
 			job_state_set(job_ptr, JOB_PENDING);
 			last_job_update = now;

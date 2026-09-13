@@ -317,7 +317,7 @@ struct job_record {
 	uint16_t direct_set_prio;	/* Priority set directly if
 					 * set the system will not
 					 * change the priority any further. */
-	time_t end_time;		/* time execution ended, actual or
+	const time_t end_time;		/* time execution ended, actual or
 					 * expected. if terminated from suspend
 					 * state, this is time suspend began */
 	time_t end_time_exp;		/* when we believe the job is
@@ -329,7 +329,7 @@ struct job_record {
 	 * job_record_t for accounting storage. NULL in live ctld jobs.
 	 */
 	char *exclusive;
-	uint32_t exit_code;		/* exit code for job (status from
+	const uint32_t exit_code;	/* exit code for job (status from
 					 * wait call) */
 	char *extra;			/* Arbitrary string */
 	elem_t *extra_constraints;	/* Head of tree built from constraints
@@ -452,7 +452,7 @@ struct job_record {
 	uint32_t prep_epilog_cnt;	/* count of epilog async tasks left */
 	uint32_t prep_prolog_cnt;	/* count of prolog async tasks left */
 	bool prep_prolog_failed;	/* any prolog_slurmctld failed */
-	uint32_t priority;		/* relative priority of the job,
+	const uint32_t priority;	/* relative priority of the job,
 					 * zero == held (don't initiate) */
 	priority_factors_t *prio_factors; /* cached value of priority factors
 					   * figured out in the priority plugin
@@ -504,7 +504,7 @@ struct job_record {
 					 * creating message or the
 					 * lowest slurmd in the
 					 * allocation */
-	time_t start_time;		/* time execution begins,
+	const time_t start_time;	/* time execution begins,
 					 * actual or expected */
 	char *state_desc;		/* optional details for state_reason */
 	uint32_t state_reason;		/* reason job still pending or failed
@@ -571,6 +571,22 @@ struct job_record {
 	bool     best_switch; /* true=min number of switches met           */
 	time_t wait4switch_start; /* Time started waiting for switch       */
 };
+
+/*
+ * The const-qualified fields above are tracked job attributes: slurmctld
+ * must change them through the job_subs setters (src/slurmctld/job_subs.h)
+ * so that job status subscriptions see every change. Code materializing a
+ * job_record_t outside that path (RPC unpack, state-file load, accounting
+ * reconstruction) writes them with these untracked macros instead.
+ */
+#define job_record_init_priority(job_ptr, value) \
+	(*(uint32_t *) &(job_ptr)->priority = (value))
+#define job_record_init_start_time(job_ptr, value) \
+	(*(time_t *) &(job_ptr)->start_time = (value))
+#define job_record_init_end_time(job_ptr, value) \
+	(*(time_t *) &(job_ptr)->end_time = (value))
+#define job_record_init_exit_code(job_ptr, value) \
+	(*(uint32_t *) &(job_ptr)->exit_code = (value))
 
 /* Job dependency specification, used in "depend_list" within job_record */
 typedef enum {

@@ -1141,9 +1141,14 @@ extern int jobacct_storage_g_job_start(void *db_conn,
 	if (IS_JOB_PENDING(job_ptr) && !IS_JOB_COMPLETING(job_ptr)) {
 		int rc;
 		time_t orig_start_time = job_ptr->start_time;
-		job_ptr->start_time = (time_t) 0;
+		/*
+		 * Untracked writes: start_time is restored before the job
+		 * write lock is released, so subscriptions must not see
+		 * this transient value.
+		 */
+		job_record_init_start_time(job_ptr, (time_t) 0);
 		rc = (*(ops.job_start))(db_conn, job_ptr);
-		job_ptr->start_time = orig_start_time;
+		job_record_init_start_time(job_ptr, orig_start_time);
 		return rc;
 	}
 

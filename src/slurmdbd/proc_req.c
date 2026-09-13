@@ -1585,15 +1585,15 @@ static int _job_complete(slurmdbd_conn_t *slurmdbd_conn, persist_msg_t *msg,
 	if (job_comp_msg->db_index != NO_VAL64)
 		job.db_index = job_comp_msg->db_index;
 	job.derived_ec = job_comp_msg->derived_ec;
-	job.end_time = job_comp_msg->end_time;
-	job.exit_code = job_comp_msg->exit_code;
+	job_record_init_end_time(&job, job_comp_msg->end_time);
+	job_record_init_exit_code(&job, job_comp_msg->exit_code);
 	job.extra = job_comp_msg->extra;
 	job.failed_node = job_comp_msg->failed_node;
 	job.job_id = job_comp_msg->job_id;
 	job.job_state = job_comp_msg->job_state;
 	job.requid = job_comp_msg->req_uid;
 	job.nodes = job_comp_msg->nodes;
-	job.start_time = job_comp_msg->start_time;
+	job_record_init_start_time(&job, job_comp_msg->start_time);
 	details.submit_time = job_comp_msg->submit_time;
 	job.start_protocol_ver = slurmdbd_conn->pcon->version;
 	job.system_comment = job_comp_msg->system_comment;
@@ -2247,10 +2247,10 @@ static void _process_job_start(slurmdbd_conn_t *slurmdbd_conn,
 	details.resv_req = job_start_msg->resv_req;
 	job.restart_cnt = job_start_msg->restart_cnt;
 	job.resv_id = job_start_msg->resv_id;
-	job.priority = job_start_msg->priority;
+	job_record_init_priority(&job, job_start_msg->priority);
 	details.script_hash = job_start_msg->script_hash;
 	job.start_protocol_ver = slurmdbd_conn->pcon->version;
-	job.start_time = job_start_msg->start_time;
+	job_record_init_start_time(&job, job_start_msg->start_time);
 	details.segment_size = job_start_msg->segment_size;
 	job.exclusive = job_exclusive_display_string(job_start_msg->exclusive);
 	job.oversubscribe =
@@ -2909,13 +2909,13 @@ static int _step_complete(slurmdbd_conn_t *slurmdbd_conn, persist_msg_t *msg,
 	job.assoc_id = step_comp_msg->assoc_id;
 	if (step_comp_msg->db_index != NO_VAL64)
 		job.db_index = step_comp_msg->db_index;
-	job.end_time = step_comp_msg->end_time;
+	job_record_init_end_time(&job, step_comp_msg->end_time);
 	step.exit_code = step_comp_msg->exit_code;
 	step.jobacct = step_comp_msg->jobacct;
 	job.job_id = step_comp_msg->step_id.job_id;
 	step.requid = step_comp_msg->req_uid;
 	job.start_protocol_ver = slurmdbd_conn->pcon->version;
-	job.start_time = step_comp_msg->start_time;
+	job_record_init_start_time(&job, step_comp_msg->start_time);
 	job.tres_alloc_str = step_comp_msg->job_tres_alloc_str;
 	step.state = step_comp_msg->state;
 
@@ -2993,7 +2993,8 @@ static int _step_start(slurmdbd_conn_t *slurmdbd_conn, persist_msg_t *msg,
 	 * cause re-rolling to happen at details.submit_time. When dealing with
 	 * job arrays that could be a long time in the past.
 	 */
-	job.start_time = step.start_time = step_start_msg->start_time;
+	step.start_time = step_start_msg->start_time;
+	job_record_init_start_time(&job, step.start_time);
 	details.submit_time = step_start_msg->job_submit_time;
 	step.time_limit = step_start_msg->time_limit;
 

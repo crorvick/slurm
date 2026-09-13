@@ -81,6 +81,7 @@
 #include "src/slurmctld/agent.h"
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/gang.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/job_scheduler.h"
 #include "src/slurmctld/licenses.h"
@@ -358,7 +359,7 @@ static bool _job_runnable_test1(job_record_t *job_ptr, bool sched_plugin)
 
 	job_indepen = job_independent(job_ptr);
 	if (sched_plugin)
-		job_ptr->start_time = (time_t) 0;
+		job_subs_set_start_time(job_ptr, (time_t) 0);
 	if (job_ptr->priority == 0)	{ /* held */
 		if ((job_ptr->state_reason != FAIL_BAD_CONSTRAINTS) &&
 		    (job_ptr->state_reason != FAIL_BURST_BUFFER_OP) &&
@@ -487,7 +488,7 @@ static job_record_t *_split_job_on_schedule_recurse(
 	debug("%s: Split out %pJ for %s use",
 	      __func__, job_ptr, split_job->reason_msg);
 	job_state_set(new_job_ptr, JOB_PENDING);
-	new_job_ptr->start_time = (time_t) 0;
+	job_subs_set_start_time(new_job_ptr, (time_t) 0);
 
 	if (!split_job->job_list)
 		split_job->job_list = list_create(NULL);
@@ -1023,11 +1024,11 @@ extern bool deadline_ok(job_record_t *job_ptr, const char *func)
 	if (fail_job) {
 		last_job_update = now;
 		job_state_set(job_ptr, JOB_DEADLINE);
-		job_ptr->exit_code = 1;
+		job_subs_set_exit_code(job_ptr, 1);
 		job_ptr->state_reason = FAIL_DEADLINE;
 		xfree(job_ptr->state_desc);
-		job_ptr->start_time = now;
-		job_ptr->end_time = now;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		srun_allocate_abort(job_ptr);
 		job_completion_logger(job_ptr, false);
 		return false;
@@ -1517,7 +1518,7 @@ static int _schedule(bool full_queue)
 		if (job_ptr->qos_ptr)
 			job_ptr->qos_id = job_ptr->qos_ptr->id;
 		job_ptr->part_ptr = part_ptr;
-		job_ptr->priority = job_queue_rec->priority;
+		job_subs_set_priority(job_ptr, job_queue_rec->priority);
 
 		xfree(job_queue_rec);
 
@@ -1861,7 +1862,8 @@ skip_start:
 			}
 		} else if (error_code == ESLURM_BURST_BUFFER_WAIT) {
 			if (job_ptr->start_time == 0) {
-				job_ptr->start_time = last_job_sched_start;
+				job_subs_set_start_time(job_ptr,
+							last_job_sched_start);
 				bb_wait_cnt++;
 				/*
 				 * Since start time wasn't set yet until this
@@ -2018,8 +2020,9 @@ skip_start:
 			job_state_set(job_ptr, JOB_PENDING);
 			job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
 			xfree(job_ptr->state_desc);
-			job_ptr->start_time = job_ptr->end_time = now;
-			job_ptr->priority = 0;
+			job_subs_set_start_time(job_ptr, now);
+			job_subs_set_end_time(job_ptr, now);
+			job_subs_set_priority(job_ptr, 0);
 			debug2("%s: setting %pJ to \"%s\" (%s)",
 			       __func__, job_ptr,
 			       job_state_reason_string(job_ptr->state_reason),
@@ -4495,7 +4498,8 @@ static void _delayed_job_start_time(job_record_t *job_ptr)
 	delay_start.cume_space_time *= 60;		/* Minutes to seconds */
 	debug2("Increasing estimated start of %pJ by %"PRIu64" secs",
 	       job_ptr, delay_start.cume_space_time);
-	job_ptr->start_time += delay_start.cume_space_time;
+	job_subs_set_start_time(job_ptr, job_ptr->start_time +
+					     delay_start.cume_space_time);
 }
 
 static int _foreach_add_to_preemptee_job_id(void *x, void *arg)
@@ -4671,7 +4675,7 @@ static int _foreach_job_start_data_part(void *x, void *arg)
 					    orig_start_time);
 		resp_data->start_time = MAX(resp_data->start_time, start_res);
 		/* restore pending job start time to what backfill set */
-		job_ptr->start_time = orig_start_time;
+		job_subs_set_start_time(job_ptr, orig_start_time);
 		resp_data->node_list  = bitmap2node_name(avail_bitmap);
 		resp_data->part_name  = xstrdup(part_ptr->name);
 

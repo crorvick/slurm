@@ -73,6 +73,7 @@
 #include "src/interfaces/select.h"
 #include "src/interfaces/topology.h"
 
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/slurmctld.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/proc_req.h"
@@ -2021,7 +2022,7 @@ static int _will_run_test(job_record_t *job_ptr, bitstr_t *bitmap,
 			       req_nodes);
 		if (rc == SLURM_SUCCESS) {
 			FREE_NULL_BITMAP(orig_map);
-			job_ptr->start_time = time(NULL);
+			job_subs_set_start_time(job_ptr, time(NULL));
 			return SLURM_SUCCESS;
 		}
 	}
@@ -2079,7 +2080,7 @@ static int _will_run_test(job_record_t *job_ptr, bitstr_t *bitmap,
 				/* Actual start time will actually be later
 				 * than "now", but return "now" for backfill
 				 * scheduler to initiate preemption. */
-				job_ptr->start_time = now;
+				job_subs_set_start_time(job_ptr, now);
 			}
 		}
 	}
@@ -2104,9 +2105,10 @@ static int _will_run_test(job_record_t *job_ptr, bitstr_t *bitmap,
 			if (rc != SLURM_SUCCESS)
 				continue;
 			if (tmp_job_ptr->end_time <= now)
-				job_ptr->start_time = now + 1;
+				job_subs_set_start_time(job_ptr, now + 1);
 			else
-				job_ptr->start_time = tmp_job_ptr->end_time;
+				job_subs_set_start_time(job_ptr,
+							tmp_job_ptr->end_time);
 			break;
 		}
 		list_iterator_destroy(job_iterator);

@@ -159,7 +159,8 @@ CONFIG_CLEAN_VPATH_FILES =
 @HAVE_CHECK_TRUE@am__EXEEXT_1 = backfill-test$(EXEEXT)
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = $(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-sched_harness.$(OBJEXT) \
-	$(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.$(OBJEXT)
+	$(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.$(OBJEXT) \
+	$(top_builddir)/src/slurmctld/backfill_test-job_subs.$(OBJEXT)
 @HAVE_CHECK_TRUE@am_backfill_test_OBJECTS =  \
 @HAVE_CHECK_TRUE@	backfill_test-backfill_test.$(OBJEXT) \
 @HAVE_CHECK_TRUE@	$(am__objects_1) \
@@ -196,6 +197,7 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-backfill.Po \
 	$(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-oracle.Po \
 	$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_scheduler.Po \
+	$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po \
 	$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-licenses.Po \
 	$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-node_scheduler.Po \
 	$(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/backfill_test-dummy_functions.Po \
@@ -724,7 +726,8 @@ LDADD = -ldl -lpthread -L$(top_builddir)/src/api/.libs -lslurmfull
 SCHED_HARNESS_SOURCES = \
 	$(top_srcdir)/testsuite/slurm_unit/sched_common/sched_harness.c	\
 	$(top_srcdir)/testsuite/slurm_unit/sched_common/sched_harness.h	\
-	$(top_srcdir)/testsuite/slurm_unit/sched_common/dummy_functions.c
+	$(top_srcdir)/testsuite/slurm_unit/sched_common/dummy_functions.c	\
+	$(top_srcdir)/src/slurmctld/job_subs.c
 
 @HAVE_CHECK_TRUE@MYCFLAGS = @CHECK_CFLAGS@ -Wall -D_ISO99_SOURCE \
 @HAVE_CHECK_TRUE@	$(am__append_1)
@@ -788,6 +791,15 @@ $(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-sched_harness.$(
 	$(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/$(am__dirstamp)
 $(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.$(OBJEXT): $(top_builddir)/testsuite/slurm_unit/sched_common/$(am__dirstamp) \
 	$(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/$(am__dirstamp)
+$(top_builddir)/src/slurmctld/$(am__dirstamp):
+	@$(MKDIR_P) $(top_builddir)/src/slurmctld
+	@: >>$(top_builddir)/src/slurmctld/$(am__dirstamp)
+$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) $(top_builddir)/src/slurmctld/$(DEPDIR)
+	@: >>$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp)
+$(top_builddir)/src/slurmctld/backfill_test-job_subs.$(OBJEXT):  \
+	$(top_builddir)/src/slurmctld/$(am__dirstamp) \
+	$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp)
 $(top_builddir)/src/plugins/sched/backfill/$(am__dirstamp):
 	@$(MKDIR_P) $(top_builddir)/src/plugins/sched/backfill
 	@: >>$(top_builddir)/src/plugins/sched/backfill/$(am__dirstamp)
@@ -800,12 +812,6 @@ $(top_builddir)/src/plugins/sched/backfill/backfill_test-backfill.$(OBJEXT):  \
 $(top_builddir)/src/plugins/sched/backfill/backfill_test-oracle.$(OBJEXT):  \
 	$(top_builddir)/src/plugins/sched/backfill/$(am__dirstamp) \
 	$(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/$(am__dirstamp)
-$(top_builddir)/src/slurmctld/$(am__dirstamp):
-	@$(MKDIR_P) $(top_builddir)/src/slurmctld
-	@: >>$(top_builddir)/src/slurmctld/$(am__dirstamp)
-$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) $(top_builddir)/src/slurmctld/$(DEPDIR)
-	@: >>$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp)
 $(top_builddir)/src/slurmctld/backfill_test-job_scheduler.$(OBJEXT):  \
 	$(top_builddir)/src/slurmctld/$(am__dirstamp) \
 	$(top_builddir)/src/slurmctld/$(DEPDIR)/$(am__dirstamp)
@@ -832,6 +838,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-backfill.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-oracle.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_scheduler.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-licenses.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-node_scheduler.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@$(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/backfill_test-dummy_functions.Po@am__quote@ # am--include-marker
@@ -909,6 +916,20 @@ $(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/testsuite/slurm_unit/sched_common/dummy_functions.c' object='$(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -c -o $(top_builddir)/testsuite/slurm_unit/sched_common/backfill_test-dummy_functions.obj `if test -f '$(top_builddir)/testsuite/slurm_unit/sched_common/dummy_functions.c'; then $(CYGPATH_W) '$(top_builddir)/testsuite/slurm_unit/sched_common/dummy_functions.c'; else $(CYGPATH_W) '$(srcdir)/$(top_builddir)/testsuite/slurm_unit/sched_common/dummy_functions.c'; fi`
+
+$(top_builddir)/src/slurmctld/backfill_test-job_subs.o: $(top_builddir)/src/slurmctld/job_subs.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -MT $(top_builddir)/src/slurmctld/backfill_test-job_subs.o -MD -MP -MF $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Tpo -c -o $(top_builddir)/src/slurmctld/backfill_test-job_subs.o `test -f '$(top_builddir)/src/slurmctld/job_subs.c' || echo '$(srcdir)/'`$(top_builddir)/src/slurmctld/job_subs.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Tpo $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/src/slurmctld/job_subs.c' object='$(top_builddir)/src/slurmctld/backfill_test-job_subs.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -c -o $(top_builddir)/src/slurmctld/backfill_test-job_subs.o `test -f '$(top_builddir)/src/slurmctld/job_subs.c' || echo '$(srcdir)/'`$(top_builddir)/src/slurmctld/job_subs.c
+
+$(top_builddir)/src/slurmctld/backfill_test-job_subs.obj: $(top_builddir)/src/slurmctld/job_subs.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -MT $(top_builddir)/src/slurmctld/backfill_test-job_subs.obj -MD -MP -MF $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Tpo -c -o $(top_builddir)/src/slurmctld/backfill_test-job_subs.obj `if test -f '$(top_builddir)/src/slurmctld/job_subs.c'; then $(CYGPATH_W) '$(top_builddir)/src/slurmctld/job_subs.c'; else $(CYGPATH_W) '$(srcdir)/$(top_builddir)/src/slurmctld/job_subs.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Tpo $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$(top_builddir)/src/slurmctld/job_subs.c' object='$(top_builddir)/src/slurmctld/backfill_test-job_subs.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -c -o $(top_builddir)/src/slurmctld/backfill_test-job_subs.obj `if test -f '$(top_builddir)/src/slurmctld/job_subs.c'; then $(CYGPATH_W) '$(top_builddir)/src/slurmctld/job_subs.c'; else $(CYGPATH_W) '$(srcdir)/$(top_builddir)/src/slurmctld/job_subs.c'; fi`
 
 $(top_builddir)/src/plugins/sched/backfill/backfill_test-backfill.o: $(top_builddir)/src/plugins/sched/backfill/backfill.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(backfill_test_CFLAGS) $(CFLAGS) -MT $(top_builddir)/src/plugins/sched/backfill/backfill_test-backfill.o -MD -MP -MF $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-backfill.Tpo -c -o $(top_builddir)/src/plugins/sched/backfill/backfill_test-backfill.o `test -f '$(top_builddir)/src/plugins/sched/backfill/backfill.c' || echo '$(srcdir)/'`$(top_builddir)/src/plugins/sched/backfill/backfill.c
@@ -1279,6 +1300,7 @@ distclean: distclean-am
 	-rm -f $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-backfill.Po
 	-rm -f $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-oracle.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_scheduler.Po
+	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-licenses.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-node_scheduler.Po
 	-rm -f $(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/backfill_test-dummy_functions.Po
@@ -1332,6 +1354,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-backfill.Po
 	-rm -f $(top_builddir)/src/plugins/sched/backfill/$(DEPDIR)/backfill_test-oracle.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_scheduler.Po
+	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-job_subs.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-licenses.Po
 	-rm -f $(top_builddir)/src/slurmctld/$(DEPDIR)/backfill_test-node_scheduler.Po
 	-rm -f $(top_builddir)/testsuite/slurm_unit/sched_common/$(DEPDIR)/backfill_test-dummy_functions.Po

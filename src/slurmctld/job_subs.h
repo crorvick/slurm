@@ -102,6 +102,18 @@ extern void job_subs_attr_dirty(job_record_t *job_ptr, job_subs_attr_t attr);
 extern job_subs_track_t *job_subs_track(job_record_t *job_ptr);
 
 /*
+ * Tracked attribute setters. Each compares against the current value and
+ * marks the attribute dirty only on a real change, so a dirty bit always
+ * means the value differs from what the last flush saw. slurmctld code
+ * must change tracked job_record_t fields through these; job_state has
+ * its own setters in job_state.c which feed the same dirty bits.
+ */
+extern void job_subs_set_priority(job_record_t *job_ptr, uint32_t priority);
+extern void job_subs_set_start_time(job_record_t *job_ptr, time_t start_time);
+extern void job_subs_set_end_time(job_record_t *job_ptr, time_t end_time);
+extern void job_subs_set_exit_code(job_record_t *job_ptr, uint32_t exit_code);
+
+/*
  * Membership list operations. The list holds the ids of every query the
  * job currently matches, kept sorted so tests and removals stay simple.
  * job_subs_member_add() and job_subs_member_del() return true if the list

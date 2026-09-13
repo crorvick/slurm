@@ -67,6 +67,7 @@
 #include "src/interfaces/site_factor.h"
 
 #include "src/slurmctld/acct_policy.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/read_config.h"
 #include "src/slurmctld/state_save.h"
@@ -2054,7 +2055,7 @@ extern int decay_apply_weighted_factors(job_record_t *job_ptr,
 	new_prio = _get_priority_internal(*start_time_ptr, job_ptr);
 	if (((flags & PRIORITY_FLAGS_INCR_ONLY) == 0) ||
 	    (job_ptr->priority < new_prio)) {
-		job_ptr->priority = new_prio;
+		job_subs_set_priority(job_ptr, new_prio);
 		last_job_update = time(NULL);
 	}
 

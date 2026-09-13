@@ -46,6 +46,7 @@
 #include "src/common/assoc_mgr.h"
 
 #include "src/slurmctld/acct_policy.h"
+#include "src/slurmctld/job_subs.h"
 
 /* These are defined here so when we link with something other than
  * the slurmctld we will have these symbols defined.  They will get
@@ -114,7 +115,8 @@ static int _foreach_job_boost_prio(void *x, void *arg)
 	uint32_t prio_boost = *(uint32_t *) arg;
 
 	if ((job_ptr->priority) && (job_ptr->direct_set_prio == 0))
-		job_ptr->priority += prio_boost;
+		job_subs_set_priority(job_ptr,
+				      job_ptr->priority + prio_boost);
 
 	return 0;
 }

@@ -62,6 +62,7 @@
 #include "src/interfaces/preempt.h"
 #include "src/interfaces/select.h"
 
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/reservation.h"
 #include "src/slurmctld/slurmctld.h"
@@ -216,7 +217,8 @@ static void _compute_start_times(void)
 				time_limit = 365 * 24 * 60 * 60;
 			if (bit_overlap_any(alloc_bitmap, avail_bitmap) &&
 			    (job_ptr->start_time <= last_job_alloc)) {
-				job_ptr->start_time = last_job_alloc;
+				job_subs_set_start_time(job_ptr,
+							last_job_alloc);
 			}
 			bit_or(alloc_bitmap, avail_bitmap);
 			last_job_alloc = job_ptr->start_time + time_limit;

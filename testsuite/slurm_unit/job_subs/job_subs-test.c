@@ -149,6 +149,43 @@ START_TEST(test_membership)
 }
 END_TEST
 
+START_TEST(test_setters_detect_change)
+{
+	job_record_t *job_ptr;
+	job_subs_track_t *track;
+
+	job_subs_init();
+	job_ptr = job_record_create();
+
+	lock_slurmctld(job_write_lock);
+
+	/* a genuine change dirties exactly that attribute */
+	job_subs_set_priority(job_ptr, 100);
+	track = job_subs_track(job_ptr);
+	ck_assert(track != NULL);
+	ck_assert(track->dirty == JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY));
+
+	/* writing the same value again must not dirty anything */
+	track->dirty = 0;
+	job_subs_set_priority(job_ptr, 100);
+	ck_assert(track->dirty == 0);
+
+	job_subs_set_start_time(job_ptr, 1000);
+	job_subs_set_end_time(job_ptr, 2000);
+	job_subs_set_exit_code(job_ptr, 0);	/* already 0: no change */
+	ck_assert(track->dirty == (JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME) |
+				   JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME)));
+	ck_assert_int_eq(job_ptr->priority, 100);
+	ck_assert_int_eq(job_ptr->start_time, 1000);
+	ck_assert_int_eq(job_ptr->end_time, 2000);
+
+	unlock_slurmctld(job_write_lock);
+
+	job_subs_detach(job_ptr);
+	job_subs_fini();
+}
+END_TEST
+
 START_TEST(test_dirty_before_init)
 {
 	job_record_t *job_ptr = job_record_create();
@@ -174,6 +211,7 @@ int main(void)
 
 	tcase_add_test(tc, test_dirty_bits);
 	tcase_add_test(tc, test_membership);
+	tcase_add_test(tc, test_setters_detect_change);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

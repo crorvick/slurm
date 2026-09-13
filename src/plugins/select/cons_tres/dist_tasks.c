@@ -38,6 +38,8 @@
 #include "select_cons_tres.h"
 #include "dist_tasks.h"
 
+#include "src/slurmctld/job_subs.h"
+
 /* Max boards supported for best-fit across boards */
 /* Larger board configurations may require new algorithm */
 /* for acceptable performance */
@@ -1058,7 +1060,7 @@ static int _cyclic_sync_core_bitmap(job_record_t *job_ptr,
 				}
 				if (!sock_str)
 					sock_str = xstrdup("NONE");
-				job_ptr->priority = 0;
+				job_subs_set_priority(job_ptr, 0);
 				job_ptr->state_reason = WAIT_HELD;
 				error("sync loop not progressing, holding %pJ, "
 				      "tried to use %u CPUs on node %s core_map:%s avoided_sockets:%s vpus:%u",

@@ -12,7 +12,8 @@ EXTRA_DIST = slurm.conf
 SCHED_HARNESS_SOURCES = \
 	$(top_srcdir)/testsuite/slurm_unit/sched_common/sched_harness.c	\
 	$(top_srcdir)/testsuite/slurm_unit/sched_common/sched_harness.h	\
-	$(top_srcdir)/testsuite/slurm_unit/sched_common/dummy_functions.c
+	$(top_srcdir)/testsuite/slurm_unit/sched_common/dummy_functions.c	\
+	$(top_srcdir)/src/slurmctld/job_subs.c
 
 if HAVE_CHECK
 MYCFLAGS  = @CHECK_CFLAGS@ -Wall

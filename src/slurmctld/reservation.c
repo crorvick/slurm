@@ -83,6 +83,7 @@
 
 #include "src/slurmctld/groups.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -1004,7 +1005,7 @@ static int _foreach_clear_job_resv(void *x, void *key)
 			   resv_ptr->name);
 		debug("%s: Holding %pJ, reservation %s was deleted",
 		      __func__, job_ptr, resv_ptr->name);
-		job_ptr->priority = 0;	/* Hold job */
+		job_subs_set_priority(job_ptr, 0);	/* Hold job */
 	}
 
 	return 0;
@@ -5370,7 +5371,7 @@ static int _validate_job_resv(job_record_t *job_ptr)
 	if (rc != SLURM_SUCCESS) {
 		error("%pJ linked to invalid reservation: %s, holding the job.",
 		      job_ptr, job_ptr->resv_name);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 		job_ptr->state_reason = WAIT_RESV_INVALID;
 		job_state_set_flag(job_ptr, JOB_RESV_DEL_HOLD);
 		xstrfmtcat(job_ptr->state_desc,
@@ -7841,7 +7842,9 @@ extern int job_test_resv(job_record_t *job_ptr, time_t *when,
 				      resv_ptr->end_time))) {
 					debug("%s: Holding %pJ, expired reservation %s",
 					      __func__, job_ptr, resv_ptr->name);
-					job_ptr->priority = 0;	/* admin hold */
+					/* admin hold */
+					job_subs_set_priority(job_ptr,
+							      0);
 				}
 				return ESLURM_RESERVATION_INVALID;
 			}

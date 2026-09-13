@@ -38,6 +38,7 @@
 \*****************************************************************************/
 
 #include "src/interfaces/topology.h"
+#include "src/slurmctld/job_subs.h"
 
 #include "backfill.h"
 #include "oracle.h"
@@ -183,7 +184,7 @@ bool oracle(job_record_t *job_ptr, bitstr_t *job_bitmap, time_t later_start,
 		/*
 		 * Set start_time and job_bitmap according to the 'best' slot
 		 */
-		job_ptr->start_time = slots[best_slot].start;
+		job_subs_set_start_time(job_ptr, slots[best_slot].start);
 		bit_copybits(job_bitmap, slots[best_slot].job_bitmap);
 		*time_limit = slots[best_slot].time_limit;
 		*boot_time = slots[best_slot].boot_time;

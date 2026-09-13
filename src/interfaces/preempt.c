@@ -48,6 +48,7 @@
 #include "src/common/slurm_protocol_api.h"
 #include "src/common/xmalloc.h"
 #include "src/common/xstring.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/reservation.h"
 #include "src/slurmctld/slurmctld.h"
 #include "src/slurmctld/job_scheduler.h"
@@ -421,8 +422,10 @@ static int _job_check_grace_internal(void *x, void *arg)
 		grace_time = (*(ops.get_grace_time))(job_ptr);
 
 	job_ptr->preempt_time = time(NULL);
-	job_ptr->end_time = MIN(job_ptr->end_time,
-				(job_ptr->preempt_time + (time_t)grace_time));
+	job_subs_set_end_time(job_ptr,
+			      MIN(job_ptr->end_time,
+				  (job_ptr->preempt_time +
+				   (time_t) grace_time)));
 	if (grace_time) {
 		debug("setting %u sec preemption grace time for %pJ to reclaim resources for %pJ",
 		      grace_time, job_ptr, preemptor_ptr);

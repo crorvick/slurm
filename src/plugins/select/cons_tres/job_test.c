@@ -45,6 +45,7 @@
 #include "src/common/slurm_time.h"
 
 #include "src/slurmctld/acct_policy.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 
 typedef struct {
@@ -2786,7 +2787,7 @@ static int _future_run_test(job_record_t *job_ptr, bitstr_t *node_bitmap,
 			 * but return "now" for backfill scheduler to
 			 * initiate preemption.
 			 */
-			job_ptr->start_time = now;
+			job_subs_set_start_time(job_ptr, now);
 			goto cleanup;
 		}
 	}
@@ -2902,11 +2903,12 @@ static int _future_run_test(job_record_t *job_ptr, bitstr_t *node_bitmap,
 				last_job_ptr = last_relevant_job;
 			last_job_end_time = _soft_job_end(last_job_ptr, now);
 			if (last_job_end_time <= now) {
-				job_ptr->start_time =
-					_guess_job_end(last_job_ptr,
-						       now);
+				job_subs_set_start_time(
+					job_ptr,
+					_guess_job_end(last_job_ptr, now));
 			} else {
-				job_ptr->start_time = last_job_end_time;
+				job_subs_set_start_time(job_ptr,
+							last_job_end_time);
 			}
 			break;
 		}
@@ -2986,7 +2988,7 @@ static int _will_run_test(job_record_t *job_ptr, bitstr_t *node_bitmap,
 		       resv_exc_ptr, false, false, false, NULL);
 	FREE_NULL_LIST(license_list);
 	if (rc == SLURM_SUCCESS) {
-		job_ptr->start_time = now;
+		job_subs_set_start_time(job_ptr, now);
 		FREE_NULL_BITMAP(orig_map);
 		return SLURM_SUCCESS;
 	}

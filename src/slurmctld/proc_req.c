@@ -102,6 +102,7 @@
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/gang.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -756,9 +757,9 @@ static int _het_job_cancel(void *x, void *arg)
 
 	info("Cancelling aborted hetjob submit: %pJ", job_ptr);
 	job_state_set(job_ptr, JOB_CANCELLED);
-	job_ptr->start_time	= now;
-	job_ptr->end_time	= now;
-	job_ptr->exit_code	= 1;
+	job_subs_set_start_time(job_ptr, now);
+	job_subs_set_end_time(job_ptr, now);
+	job_subs_set_exit_code(job_ptr, 1);
 	job_completion_logger(job_ptr, false);
 	fed_mgr_job_complete(job_ptr, 0, now);
 

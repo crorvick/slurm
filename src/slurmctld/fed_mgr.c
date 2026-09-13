@@ -50,6 +50,7 @@
 #include "src/common/xstring.h"
 #include "src/slurmctld/fed_mgr.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/proc_req.h"
 #include "src/slurmctld/slurmctld.h"
@@ -1485,8 +1486,8 @@ static void _cleanup_removed_origin_jobs(void)
 			xfree(job_ptr->resp_host);
 
 		job_state_set(job_ptr, (JOB_CANCELLED | JOB_REVOKED));
-		job_ptr->start_time = now;
-		job_ptr->end_time   = now;
+		job_subs_set_start_time(job_ptr, now);
+		job_subs_set_end_time(job_ptr, now);
 		job_completion_logger(job_ptr, false);
 	}
 	list_iterator_destroy(job_itr);
@@ -1583,8 +1584,8 @@ static void _cleanup_removed_cluster_jobs(slurmdb_cluster_rec_t *cluster)
 
 				job_state_set(job_ptr, (JOB_CANCELLED |
 							JOB_REVOKED));
-				job_ptr->start_time = now;
-				job_ptr->end_time   = now;
+				job_subs_set_start_time(job_ptr, now);
+				job_subs_set_end_time(job_ptr, now);
 				job_ptr->state_reason = WAIT_NO_REASON;
 				xfree(job_ptr->state_desc);
 				job_completion_logger(job_ptr, false);
@@ -4954,7 +4955,7 @@ extern int fed_mgr_job_revoke(job_record_t *job_ptr, bool job_complete,
 		 job_ptr, job_complete ? "REVOKED|CANCELLED" : "REVOKED");
 
 	/* Check if the job exited with one of the configured requeue values. */
-	job_ptr->exit_code = exit_code;
+	job_subs_set_exit_code(job_ptr, exit_code);
 	if (job_hold_requeue(job_ptr)) {
 		batch_requeue_fini(job_ptr);
 		return SLURM_SUCCESS;
@@ -4971,8 +4972,8 @@ extern int fed_mgr_job_revoke(job_record_t *job_ptr, bool job_complete,
 	}
 
 	job_state_set(job_ptr, state);
-	job_ptr->start_time = start_time;
-	job_ptr->end_time   = start_time;
+	job_subs_set_start_time(job_ptr, start_time);
+	job_subs_set_end_time(job_ptr, start_time);
 	job_ptr->state_reason = WAIT_NO_REASON;
 	xfree(job_ptr->state_desc);
 
@@ -5534,8 +5535,9 @@ static int _reconcile_fed_job(job_record_t *job_ptr, reconcile_sib_t *rec_sib)
 			info("%s: %pJ is cancelled on sibling %s, must have been cancelled while the origin and sibling were down",
 			     __func__, job_ptr, sibling_name);
 			job_state_set(job_ptr, JOB_CANCELLED);
-			job_ptr->start_time = remote_job->start_time;
-			job_ptr->end_time   = remote_job->end_time;
+			job_subs_set_start_time(job_ptr,
+						remote_job->start_time);
+			job_subs_set_end_time(job_ptr, remote_job->end_time);
 			job_ptr->state_reason = WAIT_NO_REASON;
 			xfree(job_ptr->state_desc);
 			job_completion_logger(job_ptr, false);
@@ -5677,8 +5679,10 @@ static int _reconcile_fed_job(job_record_t *job_ptr, reconcile_sib_t *rec_sib)
 				info("%s: %pJ is cancelled on sibling %s, must have been cancelled while the origin was down",
 				     __func__, job_ptr, sibling_name);
 				job_state_set(job_ptr, JOB_CANCELLED);
-				job_ptr->start_time = remote_job->start_time;
-				job_ptr->end_time   = remote_job->end_time;
+				job_subs_set_start_time(job_ptr,
+							remote_job->start_time);
+				job_subs_set_end_time(job_ptr,
+						      remote_job->end_time);
 				job_ptr->state_reason = WAIT_NO_REASON;
 				xfree(job_ptr->state_desc);
 				job_completion_logger(job_ptr, false);

@@ -136,6 +136,7 @@ extern int jobcomp_p_record_job_end(job_record_t *job_ptr, uint32_t event)
 	char submit_time[32], eligible_time[32], array_id[64], het_id[64];
 	char *state_string, *work_dir;
 	size_t offset = 0, tot_size, wrote;
+	time_t start_time, end_time;
 	uint32_t job_state;
 	uint32_t time_limit;
 
@@ -168,7 +169,8 @@ extern int jobcomp_p_record_job_end(job_record_t *job_ptr, uint32_t event)
 			_make_time_str(&job_ptr->resize_time, start_str,
 				       sizeof(start_str));
 		} else {
-			_make_time_str(&job_ptr->start_time, start_str,
+			start_time = job_ptr->start_time;
+			_make_time_str(&start_time, start_str,
 				       sizeof(start_str));
 		}
 		_make_time_str(&now, end_str, sizeof(end_str));
@@ -186,10 +188,12 @@ extern int jobcomp_p_record_job_end(job_record_t *job_ptr, uint32_t event)
 			 * expected start time is in the future. */
 			snprintf(start_str, sizeof(start_str), "Unknown");
 		} else {
-			_make_time_str(&job_ptr->start_time, start_str,
+			start_time = job_ptr->start_time;
+			_make_time_str(&start_time, start_str,
 				       sizeof(start_str));
 		}
-		_make_time_str(&job_ptr->end_time, end_str, sizeof(end_str));
+		end_time = job_ptr->end_time;
+		_make_time_str(&end_time, end_str, sizeof(end_str));
 	}
 
 	if (job_ptr->details && job_ptr->details->work_dir)

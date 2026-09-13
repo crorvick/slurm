@@ -2733,7 +2733,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 		safe_unpack32(&job_ptr->delay_boot, buffer);
 		safe_unpack32(&job_ptr->derived_ec, buffer);
 
-		safe_unpack32(&job_ptr->exit_code, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->exit_code, buffer);
 		safe_unpackstr(&job_ptr->extra, buffer);
 
 		safe_unpackstr(&job_ptr->failed_node, buffer);
@@ -2764,7 +2764,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 
 		safe_unpack_time(&job_ptr->preempt_time, buffer);
 		safe_unpack_time(&job_ptr->pre_sus_time, buffer);
-		safe_unpack32(&job_ptr->priority, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->priority, buffer);
 		safe_unpack32(&job_ptr->profile, buffer);
 
 		safe_unpack8(&job_ptr->reboot, buffer);
@@ -2829,7 +2829,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 		safe_unpack32(&job_ptr->delay_boot, buffer);
 		safe_unpack32(&job_ptr->derived_ec, buffer);
 
-		safe_unpack32(&job_ptr->exit_code, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->exit_code, buffer);
 		safe_unpackstr(&job_ptr->extra, buffer);
 
 		safe_unpackstr(&job_ptr->failed_node, buffer);
@@ -2860,7 +2860,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 
 		safe_unpack_time(&job_ptr->preempt_time, buffer);
 		safe_unpack_time(&job_ptr->pre_sus_time, buffer);
-		safe_unpack32(&job_ptr->priority, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->priority, buffer);
 		safe_unpack32(&job_ptr->profile, buffer);
 
 		safe_unpack8(&job_ptr->reboot, buffer);
@@ -2923,7 +2923,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 		safe_unpack32(&job_ptr->delay_boot, buffer);
 		safe_unpack32(&job_ptr->derived_ec, buffer);
 
-		safe_unpack32(&job_ptr->exit_code, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->exit_code, buffer);
 		safe_unpackstr(&job_ptr->extra, buffer);
 
 		safe_unpackstr(&job_ptr->failed_node, buffer);
@@ -2956,7 +2956,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 
 		safe_unpack_time(&job_ptr->preempt_time, buffer);
 		safe_unpack_time(&job_ptr->pre_sus_time, buffer);
-		safe_unpack32(&job_ptr->priority, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->priority, buffer);
 		safe_unpack32(&job_ptr->profile, buffer);
 
 		safe_unpack8(&job_ptr->reboot, buffer);
@@ -3019,7 +3019,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 		safe_unpack32(&job_ptr->delay_boot, buffer);
 		safe_unpack32(&job_ptr->derived_ec, buffer);
 
-		safe_unpack32(&job_ptr->exit_code, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->exit_code, buffer);
 		safe_unpackstr(&job_ptr->extra, buffer);
 
 		safe_unpackstr(&job_ptr->failed_node, buffer);
@@ -3051,7 +3051,7 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 
 		safe_unpack_time(&job_ptr->preempt_time, buffer);
 		safe_unpack_time(&job_ptr->pre_sus_time, buffer);
-		safe_unpack32(&job_ptr->priority, buffer);
+		safe_unpack32((uint32_t *) &job_ptr->priority, buffer);
 		safe_unpack32(&job_ptr->profile, buffer);
 
 		safe_unpack8(&job_ptr->reboot, buffer);
@@ -3671,8 +3671,8 @@ extern int job_record_unpack(job_record_t **out,
 		safe_unpack32(&job_ptr->db_flags, buffer);
 
 		safe_unpack_time(&job_ptr->prolog_launch_time, buffer);
-		safe_unpack_time(&job_ptr->start_time, buffer);
-		safe_unpack_time(&job_ptr->end_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->start_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->end_time, buffer);
 		safe_unpack_time(&job_ptr->end_time_exp, buffer);
 		safe_unpack_time(&job_ptr->tot_sus_time, buffer);
 
@@ -3837,8 +3837,8 @@ extern int job_record_unpack(job_record_t **out,
 		safe_unpack32(&job_ptr->db_flags, buffer);
 
 		safe_unpack_time(&job_ptr->prolog_launch_time, buffer);
-		safe_unpack_time(&job_ptr->start_time, buffer);
-		safe_unpack_time(&job_ptr->end_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->start_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->end_time, buffer);
 		safe_unpack_time(&job_ptr->end_time_exp, buffer);
 		safe_unpack_time(&job_ptr->tot_sus_time, buffer);
 
@@ -4001,8 +4001,8 @@ extern int job_record_unpack(job_record_t **out,
 		safe_unpack32(&job_ptr->db_flags, buffer);
 
 		safe_unpack_time(&job_ptr->prolog_launch_time, buffer);
-		safe_unpack_time(&job_ptr->start_time, buffer);
-		safe_unpack_time(&job_ptr->end_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->start_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->end_time, buffer);
 		safe_unpack_time(&job_ptr->end_time_exp, buffer);
 		safe_unpack_time(&job_ptr->tot_sus_time, buffer);
 
@@ -4161,8 +4161,8 @@ extern int job_record_unpack(job_record_t **out,
 		safe_unpack32(&job_ptr->db_flags, buffer);
 
 		safe_unpack_time(&job_ptr->prolog_launch_time, buffer);
-		safe_unpack_time(&job_ptr->start_time, buffer);
-		safe_unpack_time(&job_ptr->end_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->start_time, buffer);
+		safe_unpack_time((time_t *) &job_ptr->end_time, buffer);
 		safe_unpack_time(&job_ptr->end_time_exp, buffer);
 		safe_unpack_time(&job_ptr->tot_sus_time, buffer);
 

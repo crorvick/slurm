@@ -100,7 +100,7 @@ extern data_t *jobcomp_common_job_record_to_data(job_record_t *job_ptr,
 	buf_t *script = NULL;
 	enum job_states job_state;
 	int i, tmp_int, tmp_int2;
-	time_t elapsed_time = 0;
+	time_t elapsed_time = 0, start_time, end_time;
 	uint32_t time_limit;
 	data_t *record = NULL;
 	bool event_job_finish = (event & JOBCOMP_EVENT_JOB_FINISH);
@@ -117,7 +117,8 @@ extern data_t *jobcomp_common_job_record_to_data(job_record_t *job_ptr,
 		time_limit = job_ptr->time_limit;
 
 	if (!event_job_finish) {
-		parse_time_make_str_utc(&job_ptr->start_time, start_str,
+		start_time = job_ptr->start_time;
+		parse_time_make_str_utc(&start_time, start_str,
 					sizeof(start_str));
 	} else if (job_ptr->job_state & JOB_RESIZING) {
 		time_t now = time(NULL);
@@ -126,7 +127,8 @@ extern data_t *jobcomp_common_job_record_to_data(job_record_t *job_ptr,
 			parse_time_make_str_utc(&job_ptr->resize_time,
 						start_str, sizeof(start_str));
 		} else {
-			parse_time_make_str_utc(&job_ptr->start_time, start_str,
+			start_time = job_ptr->start_time;
+			parse_time_make_str_utc(&start_time, start_str,
 						sizeof(start_str));
 		}
 		parse_time_make_str_utc(&now, end_str, sizeof(end_str));
@@ -144,10 +146,12 @@ extern data_t *jobcomp_common_job_record_to_data(job_record_t *job_ptr,
 			 * expected start time is in the future. */
 			snprintf(start_str, sizeof(start_str), "Unknown");
 		} else {
-			parse_time_make_str_utc(&job_ptr->start_time, start_str,
+			start_time = job_ptr->start_time;
+			parse_time_make_str_utc(&start_time, start_str,
 						sizeof(start_str));
 		}
-		parse_time_make_str_utc(&job_ptr->end_time, end_str,
+		end_time = job_ptr->end_time;
+		parse_time_make_str_utc(&end_time, end_str,
 					sizeof(end_str));
 	}
 

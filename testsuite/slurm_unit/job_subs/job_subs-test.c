@@ -288,8 +288,9 @@ START_TEST(test_query_registry)
 	job_ptr = job_record_create();
 
 	qid1 = job_subs_query_create(ids, 3,
-				     JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE), 1001);
-	qid2 = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, 1002);
+				     JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE), 1001,
+				     true);
+	qid2 = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, 1002, true);
 	ck_assert(qid1 != qid2);
 	ck_assert_int_eq(job_subs_query_count(), 2);
 
@@ -339,7 +340,7 @@ START_TEST(test_query_delete_drops_memberships)
 	job_ptr->job_id = 5;
 	list_append(job_list, job_ptr);
 
-	qid = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
+	qid = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0, false);
 	ck_assert(job_subs_member_add(job_ptr, qid));
 	ck_assert(job_subs_member_test(job_ptr, qid));
 
@@ -395,8 +396,8 @@ START_TEST(test_event_sequence)
 	qid1 = job_subs_query_create(ids1, 1,
 				     JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
 				     JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME),
-				     0);
-	qid2 = job_subs_query_create(ids2, 1, JOB_SUBS_ALL, 0);
+				     0, false);
+	qid2 = job_subs_query_create(ids2, 1, JOB_SUBS_ALL, 0, false);
 
 	job5 = job_record_create();
 	job5->job_id = 5;
@@ -502,7 +503,7 @@ START_TEST(test_lifecycle)
 	qid = job_subs_query_create(ids, 1,
 				    JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
 				    JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE),
-				    0);
+				    0, false);
 
 	job_ptr = job_record_create();
 	job_ptr->job_id = 11;
@@ -559,6 +560,74 @@ START_TEST(test_lifecycle)
 END_TEST
 
 /*
+ * An ordinary subscriber only ever sees its own jobs. Asking for another
+ * user's job id must be silent rather than merely filtered on the way
+ * out: no snapshot, and no delete that would confirm the job exists.
+ */
+START_TEST(test_uid_scoping)
+{
+	uint32_t ids[] = { 11, 12 };
+	uint32_t qid_user, qid_priv;
+	job_record_t *mine, *theirs;
+
+	job_subs_init();
+	job_subs_set_send_fn(_capture_event);
+	job_list = list_create(NULL);
+
+	mine = job_record_create();
+	mine->job_id = 11;
+	mine->user_id = 1001;
+	list_append(job_list, mine);
+
+	theirs = job_record_create();
+	theirs->job_id = 12;
+	theirs->user_id = 1002;
+	list_append(job_list, theirs);
+
+	/* uid 1001 asks for both job ids */
+	qid_user = job_subs_query_create(ids, 2, JOB_SUBS_ALL, 1001, false);
+
+	lock_slurmctld(job_write_lock);
+	ck_assert_int_eq(job_subs_query_bind(qid_user), 1);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].event->job_id, 11);
+	ck_assert(job_subs_member_test(mine, qid_user));
+	ck_assert(!job_subs_member_test(theirs, qid_user));
+	_drain_events();
+
+	/* changes to the other user's job stay invisible */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(theirs, 5);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 0);
+
+	/* changes to its own job still flow */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(mine, 5);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].event->job_id, 11);
+	_drain_events();
+
+	/* a privileged subscriber sees both */
+	qid_priv = job_subs_query_create(ids, 2, JOB_SUBS_ALL, 1001, true);
+	lock_slurmctld(job_write_lock);
+	ck_assert_int_eq(job_subs_query_bind(qid_priv), 2);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 2);
+	_drain_events();
+
+	job_subs_set_send_fn(NULL);
+	job_subs_detach(mine);
+	job_subs_detach(theirs);
+	FREE_NULL_LIST(job_list);
+	job_subs_fini();
+}
+END_TEST
+
+/*
  * The firehose matches every job whatever its id, and stays matched
  * through changes that no filter-indexed query would react to.
  */
@@ -575,7 +644,7 @@ START_TEST(test_firehose)
 
 	qid_narrow = job_subs_query_create(ids, 1,
 					   JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE),
-					   0);
+					   0, false);
 	qid_fire = job_subs_query_create_firehose(0);
 
 	query = job_subs_query_find(qid_fire);
@@ -655,8 +724,8 @@ START_TEST(test_prune)
 	job_ptr->job_id = 3;
 	list_append(job_list, job_ptr);
 
-	qid1 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
-	qid2 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
+	qid1 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0, false);
+	qid2 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0, false);
 	job_subs_member_add(job_ptr, qid1);
 	job_subs_member_add(job_ptr, qid2);
 
@@ -727,6 +796,7 @@ int main(void)
 	tcase_add_test(tc, test_query_delete_drops_memberships);
 	tcase_add_test(tc, test_event_sequence);
 	tcase_add_test(tc, test_lifecycle);
+	tcase_add_test(tc, test_uid_scoping);
 	tcase_add_test(tc, test_firehose);
 	tcase_add_test(tc, test_prune);
 	tcase_add_test(tc, test_dirty_before_init);

@@ -132,17 +132,22 @@ typedef struct {
 	job_subs_mask_t filter_mask; /* dirty bits forcing predicate re-run */
 	job_subs_mask_t emit_mask;   /* dirty bits producing an update */
 	uid_t uid;		/* subscriber, for visibility scoping */
+	bool privileged;	/* subscriber may see other users' jobs;
+				 * resolved once at subscribe time, as job
+				 * ownership never changes */
 	time_t disconnect_time;	/* 0 while attached; set on disconnect so
 				 * stale queries can be pruned */
 } job_subs_query_t;
 
 /*
  * Register a new query over the given job ids (copied) and emit set.
+ * Unless privileged, the query only ever matches jobs owned by uid.
  * Returns the assigned query id. Membership binding and the snapshot
  * burst are driven by the caller via job_subs_query_bind().
  */
 extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
-				      job_subs_mask_t emit_mask, uid_t uid);
+				      job_subs_mask_t emit_mask, uid_t uid,
+				      bool privileged);
 
 /*
  * Register a firehose query: matches every job unconditionally and emits

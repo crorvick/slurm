@@ -6377,11 +6377,13 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 		debug2("%s: uid %u subscribed firehose query %u",
 		       __func__, msg->auth_uid, query_id);
 	} else {
+		bool privileged = validate_operator(msg->auth_uid);
+
 		lock_slurmctld(job_write_lock);
 		query_id = job_subs_query_create(req->job_ids,
 						 req->job_ids_cnt,
 						 req->emit_mask,
-						 msg->auth_uid);
+						 msg->auth_uid, privileged);
 		unlock_slurmctld(job_write_lock);
 
 		debug2("%s: uid %u subscribed query %u over %u job ids",

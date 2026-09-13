@@ -249,7 +249,8 @@ static int _cmp_job_id(const void *a, const void *b)
 }
 
 extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
-				      job_subs_mask_t emit_mask, uid_t uid)
+				      job_subs_mask_t emit_mask, uid_t uid,
+				      bool privileged)
 {
 	job_subs_query_t *query = xmalloc(sizeof(*query));
 
@@ -274,6 +275,7 @@ extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
 	}
 	query->emit_mask = emit_mask;
 	query->uid = uid;
+	query->privileged = privileged;
 
 	list_append(queries, query);
 
@@ -287,7 +289,8 @@ extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
 
 extern uint32_t job_subs_query_create_firehose(uid_t uid)
 {
-	uint32_t query_id = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, uid);
+	uint32_t query_id = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, uid,
+						  true);
 	job_subs_query_t *query = job_subs_query_find(query_id);
 
 	/*
@@ -360,6 +363,16 @@ extern bool job_subs_query_match(job_subs_query_t *query,
 {
 	if (query->firehose)
 		return true;
+
+	/*
+	 * Visibility is part of the predicate rather than a filter on the
+	 * way out, so a job the subscriber may not see never joins the
+	 * membership list and therefore produces no traffic at all - not
+	 * a snapshot, not an update, and not a delete that would leak its
+	 * existence.
+	 */
+	if (!query->privileged && (job_ptr->user_id != query->uid))
+		return false;
 
 	if (!query->job_ids_cnt)
 		return false;

@@ -1614,6 +1614,12 @@ slurm_errtab_t slurm_errtab[] = {
 		ERRTAB_ENTRY(ESLURM_TLS_REQUIRED),
 		"TLS missing but required for connection",
 	},
+
+	/* job status subscription errors */
+	{
+		ERRTAB_ENTRY(ESLURM_INVALID_QUERY_ID),
+		"Unknown or expired job subscription query id",
+	},
 };
 // clang-format on
 

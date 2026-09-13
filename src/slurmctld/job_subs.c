@@ -566,6 +566,44 @@ extern void job_subs_query_disconnected(uint32_t query_id)
 		query->disconnect_time = time(NULL);
 }
 
+extern int job_subs_prune(time_t cutoff, bool (*skip_fn)(uint32_t query_id))
+{
+	uint32_t *expired = NULL;
+	int expired_cnt = 0, pruned = 0;
+	job_subs_query_t *query;
+	list_itr_t *itr;
+
+	xassert(verify_lock(JOB_LOCK, WRITE_LOCK));
+
+	if (!queries)
+		return 0;
+
+	/* collect first: deleting mid-iteration would corrupt the walk */
+	itr = list_iterator_create(queries);
+	while ((query = list_next(itr))) {
+		if (!query->disconnect_time ||
+		    (query->disconnect_time > cutoff))
+			continue;
+		if (skip_fn && skip_fn(query->query_id)) {
+			query->disconnect_time = 0;	/* stale marking */
+			continue;
+		}
+		xrecalloc(expired, expired_cnt + 1, sizeof(*expired));
+		expired[expired_cnt++] = query->query_id;
+	}
+	list_iterator_destroy(itr);
+
+	for (int i = 0; i < expired_cnt; i++) {
+		debug("%s: pruning expired subscription query %u",
+		      __func__, expired[i]);
+		if (job_subs_query_delete(expired[i]))
+			pruned++;
+	}
+	xfree(expired);
+
+	return pruned;
+}
+
 extern void job_subs_job_created(job_record_t *job_ptr)
 {
 	if (!modified_jobs)	/* subscriptions not initialized */

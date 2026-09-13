@@ -1191,6 +1191,9 @@ extern void *slurm_ctl_conf_2_key_pairs(slurm_conf_t *conf)
 	add_key_pair(ret_list, "StateSaveLocation", "%s",
 		     conf->state_save_location);
 
+	add_key_pair(ret_list, "SubscriptionTimeout", "%u sec",
+		     conf->subscription_timeout);
+
 	add_key_pair(ret_list, "SuspendExcNodes", "%s",
 		     conf->suspend_exc_nodes);
 

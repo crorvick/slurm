@@ -431,6 +431,7 @@ s_p_options_t slurm_conf_options[] = {
 	{"StateSaveLocation", S_P_STRING},
 	{"SuspendExcNodes", S_P_STRING},
 	{"SuspendExcParts", S_P_STRING},
+	{"SubscriptionTimeout", S_P_UINT16},
 	{"SuspendExcStates", S_P_STRING},
 	{"SuspendProgram", S_P_STRING},
 	{"SuspendRate", S_P_UINT16},
@@ -3059,6 +3060,7 @@ extern void init_slurm_conf(slurm_conf_t *conf)
 	xfree(conf->suspend_exc_parts);
 	xfree(conf->suspend_exc_states);
 	xfree(conf->suspend_program);
+	conf->subscription_timeout = NO_VAL16;
 	conf->suspend_rate = NO_VAL16;
 	conf->suspend_time = NO_VAL;
 	conf->suspend_timeout = 0;
@@ -5263,6 +5265,10 @@ static int _validate_and_set_defaults(slurm_conf_t *conf,
 	} else {
 		conf->suspend_time = INFINITE;
 	}
+	if (!s_p_get_uint16(&conf->subscription_timeout, "SubscriptionTimeout",
+			    hashtbl))
+		conf->subscription_timeout = DEFAULT_SUBSCRIPTION_TIMEOUT;
+
 	if (!s_p_get_uint16(&conf->suspend_timeout, "SuspendTimeout", hashtbl))
 		conf->suspend_timeout = DEFAULT_SUSPEND_TIMEOUT;
 

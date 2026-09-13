@@ -543,6 +543,7 @@ static void _fill_ctld_conf(slurm_conf_t *conf_ptr)
 
 	conf_ptr->srun_prolog         = xstrdup(conf->srun_prolog);
 	conf_ptr->state_save_location = xstrdup(conf->state_save_location);
+	conf_ptr->subscription_timeout = conf->subscription_timeout;
 	conf_ptr->suspend_exc_nodes   = xstrdup(conf->suspend_exc_nodes);
 	conf_ptr->suspend_exc_parts   = xstrdup(conf->suspend_exc_parts);
 	conf_ptr->suspend_exc_states  = xstrdup(conf->suspend_exc_states);
@@ -6328,8 +6329,20 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 	xassert(msg->conn);
 
 	if (req->query_id != NO_VAL) {
-		/* reattach support arrives with the timeout handling */
-		rc = EINVAL;
+		/*
+		 * Reattach: the query's filter and emit set live on the
+		 * server, so only the id and the owner matter here. A
+		 * fresh snapshot burst below replaces whatever traffic
+		 * was missed while disconnected.
+		 */
+		job_subs_query_t *query;
+
+		lock_slurmctld(job_write_lock);
+		query = job_subs_query_find(req->query_id);
+		if (!query || (query->uid != msg->auth_uid))
+			rc = ESLURM_INVALID_QUERY_ID;
+		unlock_slurmctld(job_write_lock);
+		query_id = req->query_id;
 	} else if (!req->job_ids_cnt || (req->job_ids_cnt > 65536)) {
 		rc = EINVAL;
 	} else if (!req->emit_mask || (req->emit_mask & ~JOB_SUBS_ALL)) {
@@ -6343,13 +6356,20 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 		return;
 	}
 
-	lock_slurmctld(job_write_lock);
-	query_id = job_subs_query_create(req->job_ids, req->job_ids_cnt,
-					 req->emit_mask, msg->auth_uid);
-	unlock_slurmctld(job_write_lock);
+	if (req->query_id == NO_VAL) {
+		lock_slurmctld(job_write_lock);
+		query_id = job_subs_query_create(req->job_ids,
+						 req->job_ids_cnt,
+						 req->emit_mask,
+						 msg->auth_uid);
+		unlock_slurmctld(job_write_lock);
 
-	debug2("%s: uid %u subscribed query %u over %u job ids",
-	       __func__, msg->auth_uid, query_id, req->job_ids_cnt);
+		debug2("%s: uid %u subscribed query %u over %u job ids",
+		       __func__, msg->auth_uid, query_id, req->job_ids_cnt);
+	} else {
+		debug2("%s: uid %u reattached query %u",
+		       __func__, msg->auth_uid, query_id);
+	}
 
 	/* consumes msg and its connection; sends RESPONSE_JOB_SUBSCRIBE */
 	rc = job_subs_conn_attach(msg, query_id);

@@ -4908,6 +4908,7 @@ static void _pack_slurm_conf(const slurm_conf_t *conf,
 		pack16(conf->srun_port_range[1], buffer);
 		packstr(conf->srun_prolog, buffer);
 		packstr(conf->state_save_location, buffer);
+		pack16(conf->subscription_timeout, buffer);
 		packstr(conf->suspend_exc_nodes, buffer);
 		packstr(conf->suspend_exc_parts, buffer);
 		packstr(conf->suspend_exc_states, buffer);
@@ -5993,6 +5994,7 @@ static int _unpack_slurm_conf(slurm_conf_t **conf_ptr,
 
 		safe_unpackstr(&conf->srun_prolog, buffer);
 		safe_unpackstr(&conf->state_save_location, buffer);
+		safe_unpack16(&conf->subscription_timeout, buffer);
 		safe_unpackstr(&conf->suspend_exc_nodes, buffer);
 		safe_unpackstr(&conf->suspend_exc_parts, buffer);
 		safe_unpackstr(&conf->suspend_exc_states, buffer);

@@ -305,3 +305,32 @@ extern int job_subs_conn_count(void)
 
 	return count;
 }
+
+extern bool job_subs_conn_active(uint32_t query_id)
+{
+	subs_conn_t *sc;
+
+	slurm_mutex_lock(&conn_mutex);
+	sc = subs_conns ? list_find_first(subs_conns, _match_query,
+					  &query_id) : NULL;
+	slurm_mutex_unlock(&conn_mutex);
+
+	return sc && !sc->stop;
+}
+
+extern void job_subs_conn_prune(void)
+{
+	slurmctld_lock_t job_write_lock = {
+		.job = WRITE_LOCK,
+	};
+	time_t cutoff = time(NULL) - slurm_conf.subscription_timeout;
+	int pruned;
+
+	lock_slurmctld(job_write_lock);
+	pruned = job_subs_prune(cutoff, job_subs_conn_active);
+	unlock_slurmctld(job_write_lock);
+
+	if (pruned)
+		debug("%s: pruned %d expired subscription queries",
+		      __func__, pruned);
+}

@@ -2605,6 +2605,7 @@ static void *_slurmctld_background(void *no_data)
 	static time_t last_ping_srun_time;
 	static time_t last_purge_job_time;
 	static time_t last_resv_time;
+	static time_t last_subs_prune_time;
 	static time_t last_timelimit_time;
 	static time_t last_assert_primary_time;
 	static time_t last_trigger;
@@ -2910,6 +2911,12 @@ static void *_slurmctld_background(void *no_data)
 			reservation_update_groups(slurm_conf.group_force);
 			unlock_slurmctld(part_write_lock);
 			group_cache_cleanup();
+		}
+
+		if (difftime(now, last_subs_prune_time) >=
+		    SUBS_PRUNE_INTERVAL) {
+			last_subs_prune_time = now;
+			job_subs_conn_prune();
 		}
 
 		if (difftime(now, last_purge_job_time) >= purge_job_interval) {

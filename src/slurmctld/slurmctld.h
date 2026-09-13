@@ -116,6 +116,12 @@
 #define TRIGGER_INTERVAL 15
 #endif
 
+/* Sweep for expired job subscription queries every SUBS_PRUNE_INTERVAL
+ * seconds */
+#ifndef SUBS_PRUNE_INTERVAL
+#define SUBS_PRUNE_INTERVAL 30
+#endif
+
 #ifndef UPDATE_CONFIG_LIST_TIMEOUT
 #define UPDATE_CONFIG_LIST_TIMEOUT 60
 #endif

@@ -3288,6 +3288,9 @@ typedef struct {
 	char *srun_prolog;      /* srun prolog program */
 	char *state_save_location;/* pathname of slurmctld state save
 				   * directory */
+	uint16_t subscription_timeout; /* seconds a disconnected job status
+				* subscription survives before it is
+				* pruned */
 	char *suspend_exc_nodes;/* nodes to not make power saving */
 	char *suspend_exc_parts;/* partitions to not make power saving */
 	char *suspend_exc_states; /* states that should not be powered down */

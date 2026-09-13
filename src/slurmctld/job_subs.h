@@ -174,6 +174,14 @@ extern int job_subs_query_bind(uint32_t query_id);
 extern void job_subs_query_attached(uint32_t query_id);
 extern void job_subs_query_disconnected(uint32_t query_id);
 
+/*
+ * Delete every query whose disconnect_time is set and older than cutoff,
+ * except those for which skip_fn() reports a live connection (a stale
+ * disconnect marking can survive a reattach race). Returns the number of
+ * queries pruned. Caller must hold the job write lock.
+ */
+extern int job_subs_prune(time_t cutoff, bool (*skip_fn)(uint32_t query_id));
+
 /* True if the job satisfies the query's filter predicate. */
 extern bool job_subs_query_match(job_subs_query_t *query,
 				 job_record_t *job_ptr);

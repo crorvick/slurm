@@ -481,6 +481,9 @@ typedef enum {
 
 	/* TLS errors */
 	ESLURM_TLS_REQUIRED = 13000,
+
+	/* job status subscription errors */
+	ESLURM_INVALID_QUERY_ID = 13100,
 } slurm_err_t;
 
 #define IS_TOPO_ERROR(ec) \

@@ -61,4 +61,14 @@ extern int job_subs_conn_attach(slurm_msg_t *msg, uint32_t query_id);
 /* Number of live subscriber connections. */
 extern int job_subs_conn_count(void);
 
+/* True if a live connection is serving the query. */
+extern bool job_subs_conn_active(uint32_t query_id);
+
+/*
+ * Expire queries that have been disconnected longer than
+ * SubscriptionTimeout. Called periodically from the controller's
+ * background thread; takes the job write lock itself.
+ */
+extern void job_subs_conn_prune(void);
+
 #endif /* _SLURMCTLD_JOB_SUBS_CONN_H */

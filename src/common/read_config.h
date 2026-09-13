@@ -160,6 +160,7 @@ typedef struct node_record node_record_t;
 #define DEFAULT_MYSQL_PORT          3306
 #define DEFAULT_SUSPEND_RATE        60
 #define DEFAULT_SUSPEND_TIME        0
+#define DEFAULT_SUBSCRIPTION_TIMEOUT 120
 #define DEFAULT_SUSPEND_TIMEOUT     30
 #define DEFAULT_TCP_TIMEOUT         2
 #define DEFAULT_TLS_TYPE "tls/none"

@@ -558,6 +558,63 @@ START_TEST(test_lifecycle)
 }
 END_TEST
 
+static bool _skip_all(uint32_t query_id)
+{
+	return true;
+}
+
+START_TEST(test_prune)
+{
+	uint32_t ids[] = { 3 };
+	uint32_t qid1, qid2;
+	job_subs_query_t *query;
+	job_record_t *job_ptr;
+	time_t now = time(NULL);
+
+	job_subs_init();
+	job_list = list_create(NULL);
+	job_ptr = job_record_create();
+	job_ptr->job_id = 3;
+	list_append(job_list, job_ptr);
+
+	qid1 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
+	qid2 = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
+	job_subs_member_add(job_ptr, qid1);
+	job_subs_member_add(job_ptr, qid2);
+
+	lock_slurmctld(job_write_lock);
+
+	/* an attached query never expires */
+	ck_assert_int_eq(job_subs_prune(now + 3600, NULL), 0);
+
+	/* a live connection rescues a stale disconnect marking */
+	query = job_subs_query_find(qid1);
+	query->disconnect_time = now - 500;
+	ck_assert_int_eq(job_subs_prune(now - 100, _skip_all), 0);
+	ck_assert(query->disconnect_time == 0);
+
+	/* disconnected past the cutoff: pruned, membership scrubbed */
+	query->disconnect_time = now - 500;
+	ck_assert_int_eq(job_subs_prune(now - 100, NULL), 1);
+	ck_assert(job_subs_query_find(qid1) == NULL);
+	ck_assert(!job_subs_member_test(job_ptr, qid1));
+	ck_assert(job_subs_member_test(job_ptr, qid2));
+	ck_assert_int_eq(job_subs_query_count(), 1);
+
+	/* a recent disconnect survives the sweep */
+	query = job_subs_query_find(qid2);
+	query->disconnect_time = now - 50;
+	ck_assert_int_eq(job_subs_prune(now - 100, NULL), 0);
+	ck_assert(job_subs_query_find(qid2) != NULL);
+
+	unlock_slurmctld(job_write_lock);
+
+	job_subs_detach(job_ptr);
+	FREE_NULL_LIST(job_list);
+	job_subs_fini();
+}
+END_TEST
+
 START_TEST(test_dirty_before_init)
 {
 	job_record_t *job_ptr = job_record_create();
@@ -592,6 +649,7 @@ int main(void)
 	tcase_add_test(tc, test_query_delete_drops_memberships);
 	tcase_add_test(tc, test_event_sequence);
 	tcase_add_test(tc, test_lifecycle);
+	tcase_add_test(tc, test_prune);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

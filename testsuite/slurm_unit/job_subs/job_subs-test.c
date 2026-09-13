@@ -354,6 +354,138 @@ START_TEST(test_query_delete_drops_memberships)
 }
 END_TEST
 
+/* capture sink for the event-sequence tests */
+#define EV_MAX 16
+static struct {
+	uint16_t msg_type;
+	job_subs_event_msg_t *event;
+} evs[EV_MAX];
+static int ev_cnt;
+
+static void _capture_event(uint16_t msg_type, job_subs_event_msg_t *event)
+{
+	ck_assert(ev_cnt < EV_MAX);
+	evs[ev_cnt].msg_type = msg_type;
+	evs[ev_cnt].event = event;
+	ev_cnt++;
+}
+
+static void _drain_events(void)
+{
+	for (int i = 0; i < ev_cnt; i++)
+		slurm_free_job_subs_event_msg(evs[i].event);
+	ev_cnt = 0;
+}
+
+/*
+ * Drive a mutation sequence against two queries and assert the exact
+ * message stream each produces. Marking JOB_ID dirty stands in for the
+ * initial predicate evaluation a new job gets (all filter bits dirty at
+ * t=0); a mutable filter attribute would take the same path.
+ */
+START_TEST(test_event_sequence)
+{
+	uint32_t ids1[] = { 5 }, ids2[] = { 7 };
+	uint32_t qid1, qid2;
+	job_record_t *job5, *job7;
+
+	job_subs_init();
+	job_subs_set_send_fn(_capture_event);
+
+	qid1 = job_subs_query_create(ids1, 1,
+				     JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
+				     JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME),
+				     0);
+	qid2 = job_subs_query_create(ids2, 1, JOB_SUBS_ALL, 0);
+
+	job5 = job_record_create();
+	job5->job_id = 5;
+	job_record_init_priority(job5, 50);
+	job_record_init_end_time(job5, 500);
+
+	/* job 5 "arrives": snapshot to query 1 only, with emit values */
+	lock_slurmctld(job_write_lock);
+	job_subs_attr_dirty(job5, JOB_SUBS_ATTR_JOB_ID);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_SNAPSHOT);
+	ck_assert_int_eq(evs[0].event->query_id, qid1);
+	ck_assert_int_eq(evs[0].event->job_id, 5);
+	ck_assert(evs[0].event->attr_mask ==
+		  (JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
+		   JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME)));
+	ck_assert(evs[0].event->end_time == 500);
+	_drain_events();
+
+	/*
+	 * A subscribed attribute and an unsubscribed one change in the
+	 * same batch: one update, carrying only the subscribed value.
+	 */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_end_time(job5, 600);
+	job_subs_set_priority(job5, 60);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_UPDATE);
+	ck_assert_int_eq(evs[0].event->query_id, qid1);
+	ck_assert(evs[0].event->attr_mask ==
+		  JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME));
+	ck_assert(evs[0].event->end_time == 600);
+	_drain_events();
+
+	/* only unsubscribed attributes change: silence */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job5, 70);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 0);
+
+	/*
+	 * A job that enters the filter and changes an emit attribute in
+	 * the same batch gets the snapshot only: it already carries the
+	 * current values.
+	 */
+	job7 = job_record_create();
+	job7->job_id = 7;
+	lock_slurmctld(job_write_lock);
+	job_subs_attr_dirty(job7, JOB_SUBS_ATTR_JOB_ID);
+	job_subs_set_end_time(job7, 700);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_SNAPSHOT);
+	ck_assert_int_eq(evs[0].event->query_id, qid2);
+	ck_assert(evs[0].event->attr_mask == JOB_SUBS_ALL);
+	ck_assert(evs[0].event->end_time == 700);
+	_drain_events();
+
+	/* leaving the filter produces a delete */
+	job7->job_id = 8;
+	lock_slurmctld(job_write_lock);
+	job_subs_attr_dirty(job7, JOB_SUBS_ATTR_JOB_ID);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_DELETE);
+	ck_assert_int_eq(evs[0].event->query_id, qid2);
+	ck_assert(evs[0].event->attr_mask == 0);
+	ck_assert(!job_subs_member_test(job7, qid2));
+	_drain_events();
+
+	/* and its emit changes no longer notify anyone */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_end_time(job7, 800);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 0);
+
+	job_subs_set_send_fn(NULL);
+	job_subs_detach(job5);
+	job_subs_detach(job7);
+	job_subs_fini();
+}
+END_TEST
+
 START_TEST(test_dirty_before_init)
 {
 	job_record_t *job_ptr = job_record_create();
@@ -386,6 +518,7 @@ int main(void)
 	tcase_add_test(tc, test_flush_consumer);
 	tcase_add_test(tc, test_query_registry);
 	tcase_add_test(tc, test_query_delete_drops_memberships);
+	tcase_add_test(tc, test_event_sequence);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

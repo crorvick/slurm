@@ -146,9 +146,20 @@ extern bool job_subs_query_match(job_subs_query_t *query,
 				 job_record_t *job_ptr);
 
 /*
- * Consumer for the flush pass, called once per modified job with the
- * job's accumulated dirty mask, while the job write lock is still held.
- * Query evaluation plugs in here; tests install a capturing consumer.
+ * Sink for outgoing subscription messages. The flush pass builds a
+ * job_subs_event_msg_t per notification and hands it here together with
+ * its message type (MESSAGE_JOB_SNAPSHOT/UPDATE/DELETE); the sink owns
+ * the message. The network layer installs the real sender; tests install
+ * a capturing sink. With no sink installed, events are dropped.
+ */
+typedef void (*job_subs_send_fn_t)(uint16_t msg_type,
+				   job_subs_event_msg_t *event);
+extern void job_subs_set_send_fn(job_subs_send_fn_t fn);
+
+/*
+ * Diagnostic hook for the flush pass, called once per modified job with
+ * the job's accumulated dirty mask after query evaluation, while the job
+ * write lock is still held. Tests install a capturing consumer.
  */
 typedef void (*job_subs_flush_fn_t)(job_record_t *job_ptr,
 				    job_subs_mask_t dirty);

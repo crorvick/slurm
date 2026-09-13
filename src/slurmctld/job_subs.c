@@ -37,6 +37,7 @@
 #include "src/common/macros.h"
 #include "src/common/xassert.h"
 #include "src/common/xmalloc.h"
+#include "src/common/xstring.h"
 
 #include <stdlib.h>
 
@@ -56,6 +57,15 @@ static list_t *modified_jobs = NULL;
 static list_t *queries = NULL;
 static uint32_t next_query_id = 1;
 
+/*
+ * Reverse index: for each trackable attribute, the queries whose filter
+ * mask includes that bit. The flush pass re-runs predicates only for
+ * queries that care about an attribute that actually changed, instead of
+ * every registered query. A flat array is right here: the filterable
+ * attribute set is small, bounded and fixed at compile time.
+ */
+static list_t *filter_index[JOB_SUBS_ATTR_COUNT];
+
 static void _query_free(void *x)
 {
 	job_subs_query_t *query = x;
@@ -69,12 +79,16 @@ extern void job_subs_init(void)
 	xassert(!modified_jobs);
 	modified_jobs = list_create(NULL);
 	queries = list_create(_query_free);
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++)
+		filter_index[i] = list_create(NULL);
 }
 
 extern void job_subs_fini(void)
 {
 	FREE_NULL_LIST(modified_jobs);
 	FREE_NULL_LIST(queries);
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++)
+		FREE_NULL_LIST(filter_index[i]);
 }
 
 extern job_subs_track_t *job_subs_track(job_record_t *job_ptr)
@@ -255,6 +269,11 @@ extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
 
 	list_append(queries, query);
 
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++) {
+		if (query->filter_mask & JOB_SUBS_BIT(i))
+			list_append(filter_index[i], query);
+	}
+
 	return query->query_id;
 }
 
@@ -291,6 +310,11 @@ extern bool job_subs_query_delete(uint32_t query_id)
 	if (!query)
 		return false;
 
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++) {
+		if (query->filter_mask & JOB_SUBS_BIT(i))
+			list_delete_first(filter_index[i], _match_job, query);
+	}
+
 	if (job_list)
 		list_for_each(job_list, _drop_membership, &query_id);
 
@@ -317,6 +341,145 @@ extern bool job_subs_query_match(job_subs_query_t *query,
 		       sizeof(*query->job_ids), _cmp_job_id) != NULL;
 }
 
+static job_subs_send_fn_t send_fn = NULL;
+
+extern void job_subs_set_send_fn(job_subs_send_fn_t fn)
+{
+	send_fn = fn;
+}
+
+/*
+ * Build and dispatch one notification carrying the job's current values
+ * for the attributes in mask. The sink owns the message.
+ */
+static void _send_event(job_subs_query_t *query, uint16_t msg_type,
+			job_record_t *job_ptr, job_subs_mask_t mask)
+{
+	job_subs_event_msg_t *event = xmalloc(sizeof(*event));
+
+	event->query_id = query->query_id;
+	event->job_id = job_ptr->job_id;
+	event->attr_mask = mask;
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE))
+		event->job_state = job_ptr->job_state;
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY))
+		event->priority = job_ptr->priority;
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PARTITION))
+		event->partition = xstrdup(job_ptr->partition);
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_NODES))
+		event->nodes = xstrdup(job_ptr->nodes);
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME))
+		event->start_time = job_ptr->start_time;
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME))
+		event->end_time = job_ptr->end_time;
+	if (mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE))
+		event->exit_code = job_ptr->exit_code;
+
+	if (send_fn)
+		send_fn(msg_type, event);
+	else
+		slurm_free_job_subs_event_msg(event);
+}
+
+typedef struct {
+	job_record_t *job_ptr;
+	/* queries whose predicate truth may have flipped this cycle */
+	job_subs_query_t **cand;
+	int cand_cnt;
+	int cand_size;
+} flush_ctx_t;
+
+static int _collect_candidate(void *x, void *arg)
+{
+	job_subs_query_t *query = x;
+	flush_ctx_t *ctx = arg;
+
+	/* a query can sit under several dirty filter bits: visit it once */
+	for (int i = 0; i < ctx->cand_cnt; i++) {
+		if (ctx->cand[i] == query)
+			return 0;
+	}
+
+	if (ctx->cand_cnt == ctx->cand_size) {
+		ctx->cand_size = MAX(ctx->cand_size * 2, 8);
+		xrecalloc(ctx->cand, ctx->cand_size, sizeof(*ctx->cand));
+	}
+	ctx->cand[ctx->cand_cnt++] = query;
+
+	return 0;
+}
+
+/*
+ * Evaluate one modified job against the registered queries:
+ *
+ *   1. For queries whose filter references a dirty attribute, re-run the
+ *      predicate. Joining the filter earns a SNAPSHOT with full values
+ *      for the query's emit set; leaving it earns a DELETE.
+ *   2. Every remaining member whose emit mask intersects the dirty bits
+ *      gets an UPDATE with just the changed values. A query that just
+ *      received a SNAPSHOT is skipped: the snapshot already carries the
+ *      current values.
+ */
+static void _flush_job(job_record_t *job_ptr, job_subs_mask_t dirty)
+{
+	flush_ctx_t ctx = { .job_ptr = job_ptr };
+	job_subs_track_t *track;
+
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++) {
+		if (dirty & JOB_SUBS_BIT(i))
+			list_for_each(filter_index[i], _collect_candidate,
+				      &ctx);
+	}
+
+	for (int i = 0; i < ctx.cand_cnt; i++) {
+		job_subs_query_t *query = ctx.cand[i];
+		bool is_member = job_subs_member_test(job_ptr,
+						      query->query_id);
+		bool matches = job_subs_query_match(query, job_ptr);
+
+		if (!is_member && matches) {
+			job_subs_member_add(job_ptr, query->query_id);
+			_send_event(query, MESSAGE_JOB_SNAPSHOT, job_ptr,
+				    query->emit_mask);
+		} else if (is_member && !matches) {
+			job_subs_member_del(job_ptr, query->query_id);
+			_send_event(query, MESSAGE_JOB_DELETE, job_ptr, 0);
+			ctx.cand[i] = NULL;	/* no longer a member */
+		} else if (!matches) {
+			ctx.cand[i] = NULL;	/* never was a member */
+		} else {
+			ctx.cand[i] = NULL;	/* member, no snapshot */
+		}
+	}
+
+	/* ctx.cand now holds exactly the queries that got a SNAPSHOT */
+
+	track = job_ptr->subs;
+	for (int i = 0; track && (i < track->memb_cnt); i++) {
+		job_subs_query_t *query;
+		job_subs_mask_t mask;
+		bool snapshotted = false;
+
+		for (int j = 0; j < ctx.cand_cnt; j++) {
+			if (ctx.cand[j] &&
+			    (ctx.cand[j]->query_id == track->memb[i])) {
+				snapshotted = true;
+				break;
+			}
+		}
+		if (snapshotted)
+			continue;
+
+		if (!(query = job_subs_query_find(track->memb[i])))
+			continue;
+
+		if ((mask = dirty & query->emit_mask))
+			_send_event(query, MESSAGE_JOB_UPDATE, job_ptr, mask);
+	}
+
+	xfree(ctx.cand);
+}
+
 static job_subs_flush_fn_t flush_fn = NULL;
 
 extern void job_subs_set_flush_fn(job_subs_flush_fn_t fn)
@@ -337,6 +500,8 @@ extern void job_subs_flush(void)
 		job_subs_track_t *track = job_ptr->subs;
 
 		xassert(track && track->dirty);
+
+		_flush_job(job_ptr, track->dirty);
 
 		if (flush_fn)
 			flush_fn(job_ptr, track->dirty);

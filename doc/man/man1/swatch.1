@@ -1,0 +1,191 @@
+.TH swatch "1" "Slurm Commands" "Slurm 26.05" "Slurm Commands"
+
+.SH "NAME"
+swatch \- Watch job status changes streamed from slurmctld
+
+.SH "SYNOPSIS"
+\fBswatch\fR [\fIOPTIONS\fR] [\fIjobid\fR...]
+
+.SH "DESCRIPTION"
+\fBswatch\fR opens a persistent connection to \fBslurmctld\fR and is told
+when job attributes change, rather than polling. It first prints the
+current state of each job it is watching, then one line per change until
+interrupted.
+
+This is the intended replacement for scripts that loop over \fBsqueue\fR
+and compare the output: \fBswatch\fR reports only genuine changes, so
+every line it prints is news, and it imposes no polling load on the
+controller.
+
+Job ids may be given as separate arguments, comma separated, or both.
+With no job ids given, \fBswatch\fR uses \fBSLURM_JOB_ID\fR, which lets it
+run inside a batch script with no arguments.
+
+You may watch only your own jobs. Asking for another user's job id is not
+an error; that job simply never appears in the stream. See
+\fB\-\-firehose\fR for the privileged exception.
+
+.SH "OPTIONS"
+.TP
+\fB\-\-attrs\fR=<\fIlist\fR>
+Comma separated list of attributes to report, or \fBall\fR. Valid names
+are \fBstate\fR, \fBpriority\fR, \fBpartition\fR, \fBnodes\fR,
+\fBstart_time\fR, \fBend_time\fR and \fBexit_code\fR.
+The default is \fBstate,priority,nodes\fR.
+.IP
+Only the attributes named here generate output. Watching a narrow set is
+worth doing for a long\-running subscription, since a change to an
+attribute you did not ask for produces no message at all.
+.IP
+
+.TP
+\fB\-\-count\fR=<\fInumber\fR>
+Exit after reporting this many changes. Without it \fBswatch\fR runs
+until interrupted or until the connection closes.
+.IP
+
+.TP
+\fB\-\-firehose\fR
+Watch every job on the cluster and report every attribute, crossing user
+boundaries. Restricted to \fBSlurmUser\fR and root.
+.IP
+This exists for a sidecar daemon that mirrors complete job state and
+serves its own clients, rather than for interactive use. Because its
+attribute set is derived from what Slurm tracks rather than listed out, a
+newly tracked attribute appears in the stream automatically.
+.IP
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help information and exit.
+.IP
+
+.TP
+\fB\-\-json\fR
+Print one JSON object per line instead of columns. Attributes the event
+did not carry are omitted from the object rather than reported as null,
+so a consumer can distinguish "unchanged" from "changed to nothing".
+.IP
+
+.TP
+\fB\-\-noheader\fR
+Do not print the column headings.
+.IP
+
+.TP
+\fB\-\-query\-id\fR=<\fIid\fR>
+Resume the subscription with this id rather than creating a new one. The
+id is reported by \fB\-\-verbose\fR when a subscription is created, and
+remains valid for \fBSubscriptionTimeout\fR seconds after \fBswatch\fR
+exits. On resuming, the current state of every matching job is printed
+again; nothing that happened while disconnected is replayed.
+.IP
+The filter and attribute set belong to the existing subscription, so job
+ids, \fB\-\-firehose\fR and \fB\-\-attrs\fR cannot be given with this
+option.
+.IP
+
+.TP
+\fB\-Q\fR, \fB\-\-quiet\fR
+Suppress informational messages from appearing on stderr.
+Errors will still be displayed. Mutually exclusive with
+\fB\-\-verbose\fR.
+.IP
+
+.TP
+\fB\-\-usage\fR
+Print a brief help message and exit.
+.IP
+
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Increase the verbosity of \fBswatch\fR's informational messages.
+Multiple \fB\-v\fR's will further increase verbosity. Mutually exclusive
+with \fB\-\-quiet\fR.
+.IP
+
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version information and exit.
+.IP
+
+.SH "OUTPUT"
+Each line reports one event for one job. The \fBEVENT\fR column is one
+of:
+
+.TP
+\fBsnapshot\fR
+The job has started matching, which for a newly created subscription
+means every job it watches. Every selected attribute is reported.
+.IP
+
+.TP
+\fBupdate\fR
+A selected attribute changed. Only the attributes that changed are
+reported; the rest print as "\-".
+.IP
+
+.TP
+\fBdelete\fR
+The job stopped matching, which for a job id filter means it has been
+purged from the controller. A job's final state is always reported before
+its delete.
+.IP
+
+.SH "EXIT STATUS"
+\fBswatch\fR exits 0 when the stream ends normally or \fB\-\-count\fR is
+reached, and 2 on error.
+
+.SH "EXAMPLES"
+Watch two jobs until interrupted:
+
+.nf
+$ swatch 12345 12346
+JOBID      EVENT    STATE       PRIORITY   NODES
+12345      snapshot PENDING     4021       (none)
+12346      snapshot RUNNING     4022       node[001\-004]
+12345      update   RUNNING     \-          node005
+12345      update   COMPLETED   \-          \-
+12345      delete   \-           \-          \-
+.fi
+
+Watch the enclosing job from inside a batch script, reporting only state:
+
+.nf
+swatch \-\-attrs=state
+.fi
+
+Feed job completions to another program:
+
+.nf
+$ swatch \-\-json \-\-attrs=state,exit_code 12345
+{"event":"snapshot","job_id":12345,"state":"RUNNING","exit_code":0}
+{"event":"update","job_id":12345,"state":"COMPLETED","exit_code":0}
+{"event":"delete","job_id":12345}
+.fi
+
+Mirror the whole cluster from a privileged sidecar:
+
+.nf
+swatch \-\-firehose \-\-json
+.fi
+
+.SH "COPYING"
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved
+.LP
+This file is part of Slurm, a resource management program.
+For details, see <https://slurm.schedmd.com/>.
+.LP
+Slurm is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 2 of the License, or (at your option)
+any later version.
+.LP
+Slurm is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details.
+
+.SH "SEE ALSO"
+\fBsacct\fR(1), \fBsbatch\fR(1), \fBscontrol\fR(1), \fBsqueue\fR(1),
+\fBsrun\fR(1), \fBswait\fR(1), \fBslurm.conf\fR(5)

@@ -56,6 +56,8 @@ Documentation for other versions of Slurm is distributed with the code</b></p>
 	<td>Graphical user interface to view and modify Slurm state.</td></tr>
 <tr><td><a href="swait.html">swait</a></td>
 	<td>Wait for steps of a stepmgr-enabled job to complete.</td></tr>
+<tr><td><a href="swatch.html">swatch</a></td>
+	<td>Watch job status changes streamed from slurmctld.</td></tr>
 </table>
 
 <h2 id="configuration_files">Configuration Files

@@ -5270,6 +5270,51 @@ function _swait() {
 complete -o nospace -F _swait swait
 
 ################################################################################
+#			SWATCH Completion Functions
+################################################################################
+
+# Slurm helper function to list swatch trackable attributes
+#
+# RET: space delimited list
+function __slurm_swatch_attrs() {
+	echo "all state priority partition nodes start_time end_time exit_code"
+}
+
+# Slurm completion helper for swatch flag completion
+#
+# RET: 0 = did completion; 1 = no completion
+function __slurm_comp_swatch_flags() {
+	local cmd="$1"
+
+	__slurm_log_debug "$(__func__): prev='$prev' cur='$cur' cmd='$cmd'"
+
+	__slurm_comp_flags "$cmd" && return 0
+	__slurm_is_opt || return 1
+
+	case "${prev}" in
+	--attrs) __slurm_compreply_list "$(__slurm_swatch_attrs)" ;;
+	--count | --query-id) ;;
+	*) return 1 ;;
+	esac
+
+	return 0
+}
+
+# swatch completion handler
+# https://slurm.schedmd.com/swatch.html
+function _swatch() {
+	local cur prev words cword split
+	__slurm_compinit "$1" || return
+	__slurm_log_info "$(__func__): prev='$prev' cur='$cur'"
+
+	__slurm_comp_swatch_flags "$1" && return
+	$split && return
+
+	__slurm_compreply "$(__slurm_jobs)"
+}
+complete -o nospace -F _swatch swatch
+
+################################################################################
 #			SLURMRESTD Completion Functions
 ################################################################################
 

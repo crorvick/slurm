@@ -31,7 +31,8 @@ SUBDIRS =		\
 	stepmgr 	\
 	strigger	\
 	sview		\
-	swait
+	swait		\
+	swatch
 
 if HAVE_LUA
 SUBDIRS += lua

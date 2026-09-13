@@ -21,7 +21,8 @@ man1_MANS = \
 	sshare.1 \
 	sstat.1 \
 	strigger.1 \
-	swait.1
+	swait.1 \
+	swatch.1
 
 if BUILD_HDF5
 man1_MANS += sh5util.1
@@ -53,7 +54,8 @@ generated_html = \
 	sshare.html \
 	sstat.html \
 	strigger.html \
-	swait.html
+	swait.html \
+	swatch.html
 
 if BUILD_HDF5
 generated_html += sh5util.html

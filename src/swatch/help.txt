@@ -1,0 +1,31 @@
+Usage: swatch [OPTIONS] [<jobid>...]
+
+Watch job status changes streamed from slurmctld. Prints the current state
+of each matching job, then a line per change until interrupted.
+
+Job ids may be given as separate arguments or comma separated. With none
+given, $SLURM_JOB_ID is used.
+
+Options:
+      --attrs=LIST        attributes to report, comma separated, or "all"
+                          (default: state,priority,nodes). Valid names are
+                          state, priority, partition, nodes, start_time,
+                          end_time and exit_code
+      --count=N           exit after reporting N changes
+      --firehose          watch every job on the cluster and report every
+                          attribute; restricted to SlurmUser and root
+      --json              print one JSON object per line
+      --noheader          do not print the column headings
+      --query-id=ID       resume the subscription with this id instead of
+                          starting a new one
+  -Q, --quiet             suppress informational messages
+  -v, --verbose           verbosity level
+  -V, --version           output version information and exit
+
+Help options:
+  -h, --help              show this help message
+      --usage             display a brief summary of swatch options
+
+Exit status:
+  0  The stream ended normally, or --count was reached.
+  2  swatch encountered an error.

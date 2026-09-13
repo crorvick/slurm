@@ -624,6 +624,7 @@ AC_CONFIG_FILES([Makefile
 		 src/strigger/Makefile
 		 src/sview/Makefile
 		 src/swait/Makefile
+		 src/swatch/Makefile
 		 testsuite/Makefile
 		 testsuite/slurm_unit/Makefile
 		 testsuite/slurm_unit/backfill/Makefile

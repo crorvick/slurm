@@ -1,0 +1,2 @@
+Usage: swatch [-hQvV] [--attrs=LIST] [--count=N] [--firehose] [--json]
+              [--noheader] [--query-id=ID] [--usage] [<jobid>...]

@@ -6323,7 +6323,7 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 	slurmctld_lock_t job_write_lock = {
 		.job = WRITE_LOCK,
 	};
-	uint32_t query_id;
+	uint32_t query_id = NO_VAL;
 	int rc = SLURM_SUCCESS;
 
 	xassert(msg->conn);
@@ -6343,6 +6343,16 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 			rc = ESLURM_INVALID_QUERY_ID;
 		unlock_slurmctld(job_write_lock);
 		query_id = req->query_id;
+	} else if (req->flags & JOB_SUBS_FLAG_FIREHOSE) {
+		/*
+		 * The firehose sees every job regardless of owner, so it
+		 * is limited to the sidecar case it exists for.
+		 */
+		if (!validate_slurm_user(msg->auth_uid)) {
+			error("Security violation, firehose REQUEST_JOB_SUBSCRIBE RPC from uid=%u",
+			      msg->auth_uid);
+			rc = ESLURM_USER_ID_MISSING;
+		}
 	} else if (!req->job_ids_cnt || (req->job_ids_cnt > 65536)) {
 		rc = EINVAL;
 	} else if (!req->emit_mask || (req->emit_mask & ~JOB_SUBS_ALL)) {
@@ -6356,7 +6366,17 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 		return;
 	}
 
-	if (req->query_id == NO_VAL) {
+	if (req->query_id != NO_VAL) {
+		debug2("%s: uid %u reattached query %u",
+		       __func__, msg->auth_uid, query_id);
+	} else if (req->flags & JOB_SUBS_FLAG_FIREHOSE) {
+		lock_slurmctld(job_write_lock);
+		query_id = job_subs_query_create_firehose(msg->auth_uid);
+		unlock_slurmctld(job_write_lock);
+
+		debug2("%s: uid %u subscribed firehose query %u",
+		       __func__, msg->auth_uid, query_id);
+	} else {
 		lock_slurmctld(job_write_lock);
 		query_id = job_subs_query_create(req->job_ids,
 						 req->job_ids_cnt,
@@ -6366,9 +6386,6 @@ static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
 
 		debug2("%s: uid %u subscribed query %u over %u job ids",
 		       __func__, msg->auth_uid, query_id, req->job_ids_cnt);
-	} else {
-		debug2("%s: uid %u reattached query %u",
-		       __func__, msg->auth_uid, query_id);
 	}
 
 	/* consumes msg and its connection; sends RESPONSE_JOB_SUBSCRIBE */

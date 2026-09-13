@@ -515,9 +515,15 @@ typedef struct steps_drained_sub_msg {
 	char *tls_cert; /* self-signed PEM cert, or NULL */
 } steps_drained_sub_msg_t;
 
+/* flags for job_subscribe_msg_t */
+#define JOB_SUBS_FLAG_FIREHOSE 0x0001	/* privileged: match every job and
+					 * emit every tracked attribute,
+					 * ignoring job_ids and emit_mask */
+
 typedef struct job_subscribe_msg {
 	uint32_t query_id;	/* NO_VAL to open a new query, or a
 				 * previously assigned id to reattach */
+	uint16_t flags;		/* JOB_SUBS_FLAG_* */
 	uint64_t emit_mask;	/* JOB_SUBS_BIT() set of attributes whose
 				 * changes should be streamed */
 	uint32_t *job_ids;	/* filter: job ids to match */

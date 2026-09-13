@@ -72,11 +72,50 @@ START_TEST(subscribe_round_trip)
 	out = msg.data;
 	ck_assert(out != NULL);
 	ck_assert(out->query_id == NO_VAL);
+	ck_assert_int_eq(out->flags, 0);
 	ck_assert(out->emit_mask == req.emit_mask);
 	ck_assert_int_eq(out->job_ids_cnt, 3);
 	ck_assert(out->job_ids[0] == 42);
 	ck_assert(out->job_ids[1] == 1000);
 	ck_assert(out->job_ids[2] == 4294967294u);
+
+	free_buf(buf);
+	slurm_free_msg_data(msg.msg_type, msg.data);
+}
+END_TEST
+
+/*
+ * A firehose request carries neither an id filter nor an emit set; the
+ * server supplies both. Only the flag has to survive.
+ */
+START_TEST(subscribe_firehose_round_trip)
+{
+	int rc;
+	buf_t *buf = init_buf(1024);
+	slurm_msg_t msg = {{0}};
+	job_subscribe_msg_t req = {
+		.query_id = NO_VAL,
+		.flags = JOB_SUBS_FLAG_FIREHOSE,
+	};
+	job_subscribe_msg_t *out;
+
+	msg.msg_type = REQUEST_JOB_SUBSCRIBE;
+	msg.protocol_version = SLURM_PROTOCOL_VERSION;
+	msg.data = &req;
+
+	rc = pack_msg(&msg, buf);
+	ck_assert_int_eq(rc, SLURM_SUCCESS);
+
+	set_buf_offset(buf, 0);
+	msg.data = NULL;
+	rc = unpack_msg(&msg, buf);
+	ck_assert_int_eq(rc, SLURM_SUCCESS);
+
+	out = msg.data;
+	ck_assert(out != NULL);
+	ck_assert_int_eq(out->flags, JOB_SUBS_FLAG_FIREHOSE);
+	ck_assert_int_eq(out->job_ids_cnt, 0);
+	ck_assert(out->emit_mask == 0);
 
 	free_buf(buf);
 	slurm_free_msg_data(msg.msg_type, msg.data);
@@ -254,6 +293,7 @@ Suite *suite(void)
 	TCase *tc_core = tcase_create("round-trips");
 
 	tcase_add_test(tc_core, subscribe_round_trip);
+	tcase_add_test(tc_core, subscribe_firehose_round_trip);
 	tcase_add_test(tc_core, subscribe_response_round_trip);
 	tcase_add_test(tc_core, event_full_round_trip);
 	tcase_add_test(tc_core, event_sparse_round_trip);

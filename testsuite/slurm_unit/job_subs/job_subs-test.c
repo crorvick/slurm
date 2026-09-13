@@ -558,6 +558,84 @@ START_TEST(test_lifecycle)
 }
 END_TEST
 
+/*
+ * The firehose matches every job whatever its id, and stays matched
+ * through changes that no filter-indexed query would react to.
+ */
+START_TEST(test_firehose)
+{
+	uint32_t ids[] = { 100 };
+	uint32_t qid_narrow, qid_fire;
+	job_subs_query_t *query;
+	job_record_t *job_ptr;
+
+	job_subs_init();
+	job_subs_set_send_fn(_capture_event);
+	job_list = list_create(NULL);
+
+	qid_narrow = job_subs_query_create(ids, 1,
+					   JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE),
+					   0);
+	qid_fire = job_subs_query_create_firehose(0);
+
+	query = job_subs_query_find(qid_fire);
+	ck_assert(query->firehose);
+	ck_assert(query->emit_mask == JOB_SUBS_ALL);
+	ck_assert_int_eq(query->job_ids_cnt, 0);
+	ck_assert(query->filter_mask == 0);
+
+	/* a job matching no id filter still reaches the firehose */
+	job_ptr = job_record_create();
+	job_ptr->job_id = 7;
+	list_append(job_list, job_ptr);
+
+	lock_slurmctld(job_write_lock);
+	job_subs_job_created(job_ptr);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_SNAPSHOT);
+	ck_assert_int_eq(evs[0].event->query_id, qid_fire);
+	ck_assert(evs[0].event->attr_mask == JOB_SUBS_ALL);
+	ck_assert(job_subs_member_test(job_ptr, qid_fire));
+	ck_assert(!job_subs_member_test(job_ptr, qid_narrow));
+	_drain_events();
+
+	/* and every subsequent change is emitted to it */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job_ptr, 42);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_UPDATE);
+	ck_assert_int_eq(evs[0].event->query_id, qid_fire);
+	ck_assert(evs[0].event->attr_mask ==
+		  JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY));
+	ck_assert_int_eq(evs[0].event->priority, 42);
+	_drain_events();
+
+	/* binding an existing firehose sweeps all of job_list */
+	lock_slurmctld(job_write_lock);
+	ck_assert_int_eq(job_subs_query_bind(qid_fire), 1);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_SNAPSHOT);
+	_drain_events();
+
+	/* deleting it unregisters it from the unconditional set */
+	ck_assert(job_subs_query_delete(qid_fire));
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job_ptr, 43);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 0);
+
+	job_subs_set_send_fn(NULL);
+	job_subs_detach(job_ptr);
+	FREE_NULL_LIST(job_list);
+	job_subs_fini();
+}
+END_TEST
+
 static bool _skip_all(uint32_t query_id)
 {
 	return true;
@@ -649,6 +727,7 @@ int main(void)
 	tcase_add_test(tc, test_query_delete_drops_memberships);
 	tcase_add_test(tc, test_event_sequence);
 	tcase_add_test(tc, test_lifecycle);
+	tcase_add_test(tc, test_firehose);
 	tcase_add_test(tc, test_prune);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);

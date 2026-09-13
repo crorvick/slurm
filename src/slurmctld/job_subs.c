@@ -66,6 +66,12 @@ static uint32_t next_query_id = 1;
  */
 static list_t *filter_index[JOB_SUBS_ATTR_COUNT];
 
+/*
+ * Firehose queries match unconditionally, so they have no filter bits to
+ * index by and are instead considered for every modified job.
+ */
+static list_t *firehose_queries = NULL;
+
 static void _query_free(void *x)
 {
 	job_subs_query_t *query = x;
@@ -79,6 +85,7 @@ extern void job_subs_init(void)
 	xassert(!modified_jobs);
 	modified_jobs = list_create(NULL);
 	queries = list_create(_query_free);
+	firehose_queries = list_create(NULL);
 	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++)
 		filter_index[i] = list_create(NULL);
 }
@@ -86,6 +93,7 @@ extern void job_subs_init(void)
 extern void job_subs_fini(void)
 {
 	FREE_NULL_LIST(modified_jobs);
+	FREE_NULL_LIST(firehose_queries);
 	FREE_NULL_LIST(queries);
 	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++)
 		FREE_NULL_LIST(filter_index[i]);
@@ -277,6 +285,23 @@ extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
 	return query->query_id;
 }
 
+extern uint32_t job_subs_query_create_firehose(uid_t uid)
+{
+	uint32_t query_id = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, uid);
+	job_subs_query_t *query = job_subs_query_find(query_id);
+
+	/*
+	 * The firehose has no filter to index, so it is not reachable
+	 * through the reverse index and is instead considered for every
+	 * modified job. Its emit set is every attribute that exists,
+	 * which is what lets a sidecar reconstruct job state in full.
+	 */
+	query->firehose = true;
+	list_append(firehose_queries, query);
+
+	return query_id;
+}
+
 static int _match_query_id(void *x, void *key)
 {
 	job_subs_query_t *query = x;
@@ -314,6 +339,8 @@ extern bool job_subs_query_delete(uint32_t query_id)
 		if (query->filter_mask & JOB_SUBS_BIT(i))
 			list_delete_first(filter_index[i], _match_job, query);
 	}
+	if (query->firehose)
+		list_delete_first(firehose_queries, _match_job, query);
 
 	if (job_list)
 		list_for_each(job_list, _drop_membership, &query_id);
@@ -430,6 +457,9 @@ static void _flush_job(job_record_t *job_ptr, job_subs_mask_t dirty)
 			list_for_each(filter_index[i], _collect_candidate,
 				      &ctx);
 	}
+
+	/* the firehose matches every job, whatever changed on it */
+	list_for_each(firehose_queries, _collect_candidate, &ctx);
 
 	for (int i = 0; i < ctx.cand_cnt; i++) {
 		job_subs_query_t *query = ctx.cand[i];

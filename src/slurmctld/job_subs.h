@@ -144,6 +144,14 @@ typedef struct {
 extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
 				      job_subs_mask_t emit_mask, uid_t uid);
 
+/*
+ * Register a firehose query: matches every job unconditionally and emits
+ * every tracked attribute, so a privileged sidecar can mirror complete
+ * job state and serve its own downstream subscribers. Returns the
+ * assigned query id.
+ */
+extern uint32_t job_subs_query_create_firehose(uid_t uid);
+
 /* The registered query, or NULL. */
 extern job_subs_query_t *job_subs_query_find(uint32_t query_id);
 

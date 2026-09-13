@@ -10982,6 +10982,7 @@ static void _pack_job_subscribe_msg(const slurm_msg_t *smsg, buf_t *buffer)
 
 	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
 		pack32(msg->query_id, buffer);
+		pack16(msg->flags, buffer);
 		pack64(msg->emit_mask, buffer);
 		pack32_array(msg->job_ids, msg->job_ids_cnt, buffer);
 	}
@@ -10993,6 +10994,7 @@ static int _unpack_job_subscribe_msg(slurm_msg_t *smsg, buf_t *buffer)
 
 	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->query_id, buffer);
+		safe_unpack16(&msg->flags, buffer);
 		safe_unpack64(&msg->emit_mask, buffer);
 		safe_unpack32_array(&msg->job_ids, &msg->job_ids_cnt, buffer);
 	}

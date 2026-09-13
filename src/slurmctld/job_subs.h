@@ -129,6 +129,24 @@ extern bool job_subs_member_test(job_record_t *job_ptr, uint32_t query_id);
  */
 extern void job_subs_detach(job_record_t *job_ptr);
 
+/*
+ * Consumer for the flush pass, called once per modified job with the
+ * job's accumulated dirty mask, while the job write lock is still held.
+ * Query evaluation plugs in here; tests install a capturing consumer.
+ */
+typedef void (*job_subs_flush_fn_t)(job_record_t *job_ptr,
+				    job_subs_mask_t dirty);
+extern void job_subs_set_flush_fn(job_subs_flush_fn_t fn);
+
+/*
+ * Flush the modified-jobs list: hand each queued job to the consumer,
+ * then clear its dirty bits. unlock_slurmctld() calls this at the job
+ * write lock boundary, the point where a batch of mutations (an RPC
+ * handler, a scheduling cycle, ...) is known to be complete and
+ * consistent.
+ */
+extern void job_subs_flush(void);
+
 /* Number of jobs waiting for the next flush pass. */
 extern int job_subs_modified_count(void);
 

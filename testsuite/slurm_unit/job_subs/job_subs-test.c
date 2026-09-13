@@ -46,13 +46,6 @@
 
 static slurmctld_lock_t job_write_lock = { .job = WRITE_LOCK };
 
-static void _dirty(job_record_t *job_ptr, job_subs_attr_t attr)
-{
-	lock_slurmctld(job_write_lock);
-	job_subs_attr_dirty(job_ptr, attr);
-	unlock_slurmctld(job_write_lock);
-}
-
 START_TEST(test_dirty_bits)
 {
 	job_record_t *job1, *job2;
@@ -63,11 +56,13 @@ START_TEST(test_dirty_bits)
 	job1 = job_record_create();
 	job2 = job_record_create();
 
+	lock_slurmctld(job_write_lock);
+
 	/* tracking state is allocated lazily */
 	ck_assert(job_subs_track(job1) == NULL);
 	ck_assert_int_eq(job_subs_modified_count(), 0);
 
-	_dirty(job1, JOB_SUBS_ATTR_STATE);
+	job_subs_attr_dirty(job1, JOB_SUBS_ATTR_STATE);
 
 	track = job_subs_track(job1);
 	ck_assert(track != NULL);
@@ -75,25 +70,52 @@ START_TEST(test_dirty_bits)
 	ck_assert_int_eq(job_subs_modified_count(), 1);
 
 	/* re-marking the same attribute must not queue the job twice */
-	_dirty(job1, JOB_SUBS_ATTR_STATE);
+	job_subs_attr_dirty(job1, JOB_SUBS_ATTR_STATE);
 	ck_assert_int_eq(job_subs_modified_count(), 1);
 
 	/* a second attribute accumulates in the same mask */
-	_dirty(job1, JOB_SUBS_ATTR_PRIORITY);
+	job_subs_attr_dirty(job1, JOB_SUBS_ATTR_PRIORITY);
 	ck_assert(track->dirty == (JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
 				   JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY)));
 	ck_assert_int_eq(job_subs_modified_count(), 1);
 
 	/* a second job queues independently */
-	_dirty(job2, JOB_SUBS_ATTR_END_TIME);
+	job_subs_attr_dirty(job2, JOB_SUBS_ATTR_END_TIME);
 	ck_assert_int_eq(job_subs_modified_count(), 2);
 
-	/* detach drops the queue entry along with the tracking state */
+	/* releasing the job write lock flushes and clears everything */
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(job_subs_modified_count(), 0);
+	ck_assert(job_subs_track(job1)->dirty == 0);
+	ck_assert(job_subs_track(job2)->dirty == 0);
+
 	job_subs_detach(job1);
 	ck_assert(job_subs_track(job1) == NULL);
+	job_subs_detach(job2);
+
+	job_subs_fini();
+}
+END_TEST
+
+START_TEST(test_detach_dequeues)
+{
+	job_record_t *job1, *job2;
+
+	job_subs_init();
+	job1 = job_record_create();
+	job2 = job_record_create();
+
+	lock_slurmctld(job_write_lock);
+	job_subs_attr_dirty(job1, JOB_SUBS_ATTR_STATE);
+	job_subs_attr_dirty(job2, JOB_SUBS_ATTR_STATE);
+	ck_assert_int_eq(job_subs_modified_count(), 2);
+
+	/* detach with dirty bits pending drops the queue entry too */
+	job_subs_detach(job1);
 	ck_assert_int_eq(job_subs_modified_count(), 1);
 	job_subs_detach(job2);
 	ck_assert_int_eq(job_subs_modified_count(), 0);
+	unlock_slurmctld(job_write_lock);
 
 	job_subs_fini();
 }
@@ -165,15 +187,11 @@ START_TEST(test_setters_detect_change)
 	ck_assert(track != NULL);
 	ck_assert(track->dirty == JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY));
 
-	/* writing the same value again must not dirty anything */
-	track->dirty = 0;
-	job_subs_set_priority(job_ptr, 100);
-	ck_assert(track->dirty == 0);
-
 	job_subs_set_start_time(job_ptr, 1000);
 	job_subs_set_end_time(job_ptr, 2000);
 	job_subs_set_exit_code(job_ptr, 0);	/* already 0: no change */
-	ck_assert(track->dirty == (JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME) |
+	ck_assert(track->dirty == (JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY) |
+				   JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME) |
 				   JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME)));
 	ck_assert_int_eq(job_ptr->priority, 100);
 	ck_assert_int_eq(job_ptr->start_time, 1000);
@@ -181,7 +199,77 @@ START_TEST(test_setters_detect_change)
 
 	unlock_slurmctld(job_write_lock);
 
+	/* writing the same values again must not dirty anything */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job_ptr, 100);
+	job_subs_set_start_time(job_ptr, 1000);
+	job_subs_set_end_time(job_ptr, 2000);
+	ck_assert(track->dirty == 0);
+	ck_assert_int_eq(job_subs_modified_count(), 0);
+	unlock_slurmctld(job_write_lock);
+
 	job_subs_detach(job_ptr);
+	job_subs_fini();
+}
+END_TEST
+
+/* capture consumer for the flush tests */
+#define CAP_MAX 8
+static struct {
+	job_record_t *job_ptr;
+	job_subs_mask_t dirty;
+} cap[CAP_MAX];
+static int cap_cnt;
+
+static void _capture(job_record_t *job_ptr, job_subs_mask_t dirty)
+{
+	ck_assert(cap_cnt < CAP_MAX);
+	cap[cap_cnt].job_ptr = job_ptr;
+	cap[cap_cnt].dirty = dirty;
+	cap_cnt++;
+}
+
+START_TEST(test_flush_consumer)
+{
+	job_record_t *job1, *job2;
+
+	job_subs_init();
+	job_subs_set_flush_fn(_capture);
+	job1 = job_record_create();
+	job2 = job_record_create();
+
+	/*
+	 * A mutation batch: the consumer must see each modified job once,
+	 * with its accumulated dirty mask, at the unlock boundary.
+	 */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job1, 7);
+	job_subs_set_start_time(job1, 1000);
+	job_subs_set_end_time(job2, 2000);
+	ck_assert_int_eq(cap_cnt, 0);	/* nothing until the flush */
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(cap_cnt, 2);
+	ck_assert(cap[0].job_ptr == job1);
+	ck_assert(cap[0].dirty == (JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY) |
+				   JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME)));
+	ck_assert(cap[1].job_ptr == job2);
+	ck_assert(cap[1].dirty == JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME));
+
+	/* an empty batch flushes nothing */
+	lock_slurmctld(job_write_lock);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(cap_cnt, 2);
+
+	/* a no-op write flushes nothing either */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_priority(job1, 7);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(cap_cnt, 2);
+
+	job_subs_set_flush_fn(NULL);
+	job_subs_detach(job1);
+	job_subs_detach(job2);
 	job_subs_fini();
 }
 END_TEST
@@ -191,7 +279,9 @@ START_TEST(test_dirty_before_init)
 	job_record_t *job_ptr = job_record_create();
 
 	/* harmless before job_subs_init(): no tracking state appears */
-	_dirty(job_ptr, JOB_SUBS_ATTR_STATE);
+	lock_slurmctld(job_write_lock);
+	job_subs_attr_dirty(job_ptr, JOB_SUBS_ATTR_STATE);
+	unlock_slurmctld(job_write_lock);
 	ck_assert(job_subs_track(job_ptr) == NULL);
 	ck_assert_int_eq(job_subs_modified_count(), 0);
 
@@ -210,8 +300,10 @@ int main(void)
 	log_init("job_subs-test", log_opts, 0, NULL);
 
 	tcase_add_test(tc, test_dirty_bits);
+	tcase_add_test(tc, test_detach_dequeues);
 	tcase_add_test(tc, test_membership);
 	tcase_add_test(tc, test_setters_detect_change);
+	tcase_add_test(tc, test_flush_consumer);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

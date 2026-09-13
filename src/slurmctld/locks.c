@@ -42,6 +42,7 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/slurmctld.h"
 
@@ -148,6 +149,15 @@ extern void lock_slurmctld(slurmctld_lock_t lock_levels)
 extern void unlock_slurmctld(slurmctld_lock_t lock_levels)
 {
 	xassert(_clear_locks(lock_levels));
+
+	/*
+	 * The job write lock boundary is where a batch of related job
+	 * mutations - an RPC handler, a scheduling cycle - is complete
+	 * and consistent, so flush subscription dirty bits here, before
+	 * the lock is released.
+	 */
+	if (lock_levels.job == WRITE_LOCK)
+		job_subs_flush();
 
 	if (lock_levels.select_node)
 		slurm_rwlock_unlock(&slurmctld_locks[SELECT_NODE_LOCK]);

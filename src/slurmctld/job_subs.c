@@ -202,6 +202,34 @@ static int _match_job(void *x, void *key)
 	return (x == key);
 }
 
+static job_subs_flush_fn_t flush_fn = NULL;
+
+extern void job_subs_set_flush_fn(job_subs_flush_fn_t fn)
+{
+	flush_fn = fn;
+}
+
+extern void job_subs_flush(void)
+{
+	job_record_t *job_ptr;
+
+	if (!modified_jobs || list_is_empty(modified_jobs))
+		return;
+
+	xassert(verify_lock(JOB_LOCK, WRITE_LOCK));
+
+	while ((job_ptr = list_pop(modified_jobs))) {
+		job_subs_track_t *track = job_ptr->subs;
+
+		xassert(track && track->dirty);
+
+		if (flush_fn)
+			flush_fn(job_ptr, track->dirty);
+
+		track->dirty = 0;
+	}
+}
+
 extern void job_subs_detach(job_record_t *job_ptr)
 {
 	job_subs_track_t *track = job_ptr->subs;

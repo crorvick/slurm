@@ -486,6 +486,78 @@ START_TEST(test_event_sequence)
 }
 END_TEST
 
+/*
+ * The lifecycle hooks: a job entering job_list snapshots to matching
+ * queries at the next flush, and a purged job sends any unflushed final
+ * values followed by the delete, immediately.
+ */
+START_TEST(test_lifecycle)
+{
+	uint32_t ids[] = { 11 };
+	uint32_t qid;
+	job_record_t *job_ptr;
+
+	job_subs_init();
+	job_subs_set_send_fn(_capture_event);
+	qid = job_subs_query_create(ids, 1,
+				    JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE) |
+				    JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE),
+				    0);
+
+	job_ptr = job_record_create();
+	job_ptr->job_id = 11;
+
+	lock_slurmctld(job_write_lock);
+	job_subs_job_created(job_ptr);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_SNAPSHOT);
+	ck_assert_int_eq(evs[0].event->query_id, qid);
+	ck_assert(job_subs_member_test(job_ptr, qid));
+	_drain_events();
+
+	/*
+	 * Completion values land and the job is purged before another
+	 * flush runs: the member still sees the final update, then the
+	 * delete, in that order.
+	 */
+	lock_slurmctld(job_write_lock);
+	job_subs_set_exit_code(job_ptr, 9);
+	job_subs_job_purged(job_ptr);
+	ck_assert_int_eq(job_subs_modified_count(), 0);
+	unlock_slurmctld(job_write_lock);
+
+	ck_assert_int_eq(ev_cnt, 2);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_UPDATE);
+	ck_assert(evs[0].event->attr_mask ==
+		  JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE));
+	ck_assert_int_eq(evs[0].event->exit_code, 9);
+	ck_assert_int_eq(evs[1].msg_type, MESSAGE_JOB_DELETE);
+	ck_assert(evs[1].event->attr_mask == 0);
+	ck_assert(job_subs_track(job_ptr) == NULL);
+	_drain_events();
+
+	/* a purge with nothing pending is just the delete */
+	job_ptr = job_record_create();
+	job_ptr->job_id = 11;
+	lock_slurmctld(job_write_lock);
+	job_subs_job_created(job_ptr);
+	unlock_slurmctld(job_write_lock);
+	_drain_events();
+
+	lock_slurmctld(job_write_lock);
+	job_subs_job_purged(job_ptr);
+	unlock_slurmctld(job_write_lock);
+	ck_assert_int_eq(ev_cnt, 1);
+	ck_assert_int_eq(evs[0].msg_type, MESSAGE_JOB_DELETE);
+	_drain_events();
+
+	job_subs_set_send_fn(NULL);
+	job_subs_fini();
+}
+END_TEST
+
 START_TEST(test_dirty_before_init)
 {
 	job_record_t *job_ptr = job_record_create();
@@ -519,6 +591,7 @@ int main(void)
 	tcase_add_test(tc, test_query_registry);
 	tcase_add_test(tc, test_query_delete_drops_memberships);
 	tcase_add_test(tc, test_event_sequence);
+	tcase_add_test(tc, test_lifecycle);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

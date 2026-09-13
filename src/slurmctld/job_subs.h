@@ -103,6 +103,21 @@ extern bool job_subs_member_test(job_record_t *job_ptr, uint32_t query_id);
 extern void job_subs_detach(job_record_t *job_ptr);
 
 /*
+ * A job just entered job_list. Treat it as "all filter bits dirty at
+ * t=0": the next flush runs every filter-indexed query's predicate over
+ * it and snapshots the matches, through exactly the same path a filter
+ * attribute change would take.
+ */
+extern void job_subs_job_created(job_record_t *job_ptr);
+
+/*
+ * The job is leaving job_list for good. Send members a final update for
+ * any dirty emit attributes that have not flushed yet, then the delete,
+ * then drop the tracking state. Call with the job record still intact.
+ */
+extern void job_subs_job_purged(job_record_t *job_ptr);
+
+/*
  * A registered query: a filter predicate over jobs plus the set of
  * attributes whose changes stream to the subscriber. The predicate is
  * job-id membership today, but the filter mask records which attribute

@@ -803,6 +803,7 @@ static int _add_job_record(job_record_t *job_ptr, int num_jobs)
 	job_count += num_jobs;
 	last_job_update = time(NULL);
 	list_append(job_list, job_ptr);
+	job_subs_job_created(job_ptr);
 
 	return SLURM_SUCCESS;
 }
@@ -10128,6 +10129,8 @@ static void _delete_job_common(job_record_t *job_ptr)
 {
 	if (!job_ptr->job_id)
 		return;
+
+	job_subs_job_purged(job_ptr);
 
 	/* Remove record from fed_job_list */
 	fed_mgr_remove_fed_job_info(job_ptr->job_id);

@@ -553,6 +553,7 @@ static int _split_job_on_schedule(void *x, void *arg)
 static int _transfer_job_list(void *x, void *arg)
 {
 	list_append(job_list, x);
+	job_subs_job_created(x);
 
 	return 0;
 }

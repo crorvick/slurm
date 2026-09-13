@@ -510,6 +510,39 @@ extern void job_subs_flush(void)
 	}
 }
 
+extern void job_subs_job_created(job_record_t *job_ptr)
+{
+	if (!modified_jobs)	/* subscriptions not initialized */
+		return;
+
+	for (int i = 0; i < JOB_SUBS_ATTR_COUNT; i++) {
+		if (JOB_SUBS_FILTERABLE & JOB_SUBS_BIT(i))
+			job_subs_attr_dirty(job_ptr, i);
+	}
+}
+
+extern void job_subs_job_purged(job_record_t *job_ptr)
+{
+	job_subs_track_t *track = job_ptr->subs;
+
+	if (!track)
+		return;
+
+	for (int i = 0; i < track->memb_cnt; i++) {
+		job_subs_query_t *query = job_subs_query_find(track->memb[i]);
+		job_subs_mask_t mask;
+
+		if (!query)
+			continue;
+
+		if ((mask = track->dirty & query->emit_mask))
+			_send_event(query, MESSAGE_JOB_UPDATE, job_ptr, mask);
+		_send_event(query, MESSAGE_JOB_DELETE, job_ptr, 0);
+	}
+
+	job_subs_detach(job_ptr);
+}
+
 extern void job_subs_detach(job_record_t *job_ptr)
 {
 	job_subs_track_t *track = job_ptr->subs;

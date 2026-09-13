@@ -1,0 +1,227 @@
+<!--#include virtual="header.txt"-->
+
+<h1>Job Status Subscriptions</h1>
+
+<p>A job status subscription lets a client hold a connection open to
+<b>slurmctld</b> and be told when job attributes change, instead of polling
+<b>squeue</b> or <b>slurmrestd</b> and diffing the results. The client
+describes what it cares about once; the controller then streams a snapshot of
+the matching jobs followed by updates as those jobs change.</p>
+
+<p>This page describes the model and the reasoning behind it. It is aimed at
+someone maintaining or extending the implementation in
+<i>src/slurmctld/job_subs.c</i>.</p>
+
+<h2 id="MODEL">The model
+<a class="slurm_link" href="#MODEL"></a>
+</h2>
+
+<p>A client subscribes with a <b>query</b>, which has two parts:</p>
+
+<ul>
+<li>a <b>filter</b>, the predicate deciding which jobs the query is about; and
+</li>
+<li>an <b>emit set</b>, the attributes whose changes the client wants to hear
+about.</li>
+</ul>
+
+<p>The controller answers with a server-assigned <b>query id</b> and then
+sends three kinds of message:</p>
+
+<table>
+<tr><th>Message</th><th>Sent when</th><th>Payload</th></tr>
+<tr>
+  <td>MESSAGE_JOB_SNAPSHOT</td>
+  <td>A job starts matching the filter, including at initial subscribe and on
+      reconnect</td>
+  <td>Job id and the current value of every attribute in the emit set</td>
+</tr>
+<tr>
+  <td>MESSAGE_JOB_UPDATE</td>
+  <td>An attribute in the emit set changes on a job already matching</td>
+  <td>Job id and only the attributes that changed</td>
+</tr>
+<tr>
+  <td>MESSAGE_JOB_DELETE</td>
+  <td>A job stops matching the filter, including when it is purged</td>
+  <td>Job id</td>
+</tr>
+</table>
+
+<p>An update is only sent when a value genuinely differs from what the client
+was last told, so a client can treat every update as real news. This falls out
+of how changes are recorded rather than from any per-client bookkeeping; see
+<a href="#TRACKING">tracking changes</a> below.</p>
+
+<h2 id="FILTER">Filter attributes and emit attributes
+<a class="slurm_link" href="#FILTER"></a>
+</h2>
+
+<p>Any tracked attribute may appear in a query's emit set. Only a smaller,
+explicitly enumerated set may be referenced by a filter. Today that set is
+<b>job id alone</b>.</p>
+
+<p>Job id never changes over a job's lifetime, so a job-id filter only has to
+be evaluated once per job. The machinery is deliberately not written that way:
+filter attributes expected later &mdash; partition, account, QOS &mdash; are
+mutable, and a job can move in and out of a query's scope as they change. The
+implementation therefore re-evaluates a query's predicate whenever an attribute
+its filter references has changed, which is simply a no-op in the job id
+case.</p>
+
+<p>Job state is deliberately <i>not</i> filterable. State is the highest-churn
+field in the system, and allowing filters on it would put every state
+transition on the membership-evaluation path. A client wanting "my pending
+jobs" subscribes to the jobs it owns and filters state itself from the update
+stream.</p>
+
+<h2 id="TRACKING">Tracking changes
+<a class="slurm_link" href="#TRACKING"></a>
+</h2>
+
+<p>Each tracked attribute has a bit in a per-job dirty mask. A job carrying any
+dirty bit is queued on a global modified-jobs list, so notification work never
+requires scanning the job list.</p>
+
+<p>Dirty bits are set by per-attribute setters, which compare the new value
+against the current one and mark the attribute only on a real change. The
+underlying fields in <b>job_record_t</b> are const-qualified so that a direct
+assignment fails to compile: whether every mutation site is instrumented is
+answered by the compiler rather than by grep. Code that materializes a job
+record outside the controller's mutation path &mdash; unpacking saved state,
+rebuilding a record from accounting data &mdash; uses the
+<b>job_record_init_*</b> macros instead, which write the field without
+recording a change.</p>
+
+<p>Because a dirty bit means the value actually changed, any query whose emit
+set includes that attribute is guaranteed to have something new to say. That is
+what makes the "only send real changes" guarantee free of per-query
+"last sent" state.</p>
+
+<h2 id="FLUSH">The flush pass
+<a class="slurm_link" href="#FLUSH"></a>
+</h2>
+
+<p>Notifications are not emitted as attributes change. A single RPC handler or
+scheduling cycle may touch several attributes on several jobs, and clients
+should see that batch only once it is complete and consistent. The flush pass
+therefore runs at the release of the job write lock, which marks exactly that
+boundary regardless of which subsystem made the change.</p>
+
+<p>For each job on the modified-jobs list:</p>
+
+<ol>
+<li>Candidate queries are collected from a reverse index mapping each attribute
+to the queries whose filter references it, so only queries that care about
+something that actually changed are re-evaluated. Firehose queries
+(<a href="#FIREHOSE">below</a>) match unconditionally and are considered for
+every job.</li>
+<li>Each candidate's predicate is re-run. A job that has started matching joins
+the query's membership list and is sent a snapshot; one that has stopped
+matching leaves the list and is sent a delete. No change in the predicate's
+truth value means no message.</li>
+<li>Every remaining member whose emit set intersects the dirty bits is sent an
+update carrying just the changed attributes. A query that received a snapshot
+in this same pass is skipped, since the snapshot already carries current
+values.</li>
+<li>The job's dirty mask is cleared.</li>
+</ol>
+
+<h2 id="LIFECYCLE">Job creation and purge
+<a class="slurm_link" href="#LIFECYCLE"></a>
+</h2>
+
+<p>A new job is treated as having every filter attribute dirty, so the next
+flush evaluates each query against it and snapshots the matches through the
+ordinary path rather than a special case.</p>
+
+<p>When a job is purged, its members are sent a final update for any dirty emit
+attributes that have not yet flushed, then the delete. In practice completion
+values were already flushed when the completing RPC released the job write
+lock, and the purge &mdash; typically <b>MinJobAge</b> later &mdash; sends only
+the delete. Either way a client sees a job's final state before it sees the job
+disappear.</p>
+
+<p>A requeued job keeps its job id, so requeue is an ordinary state change
+rather than a delete followed by a snapshot.</p>
+
+<h2 id="RECONNECT">Reconnect and timeout
+<a class="slurm_link" href="#RECONNECT"></a>
+</h2>
+
+<p>A query lives in the controller, not in the connection, so a client that
+loses its connection can reconnect and present the query id it was given. The
+query is re-bound to the new connection and the client is sent a fresh snapshot
+of every job the query currently matches.</p>
+
+<p>That snapshot &mdash; rather than a replay log &mdash; is what makes the
+client whole, and it is also the answer to a slow client. Since nothing has to
+be preserved for a client that is not reading, a client whose outbound queue
+grows without bound is simply disconnected; when it comes back it is handed
+correct current state. There is no need for the controller to choose between
+unbounded memory and silently dropping messages.</p>
+
+<p>A query whose client does not return within <b>SubscriptionTimeout</b>
+seconds (default 120) is discarded by a periodic sweep. Reattaching to an id
+that has expired, never existed, or belongs to another user fails with
+<i>Unknown or expired job subscription query id</i>.</p>
+
+<h2 id="DELIVERY">Delivery
+<a class="slurm_link" href="#DELIVERY"></a>
+</h2>
+
+<p>The flush pass runs with the job write lock held, so it only appends
+messages to a per-connection queue. A separate thread per connection performs
+the blocking sends. A client that stops reading stalls only its own delivery
+thread and never the controller.</p>
+
+<h2 id="AUTH">Authorization
+<a class="slurm_link" href="#AUTH"></a>
+</h2>
+
+<p>Subscriptions are authenticated like every other Slurm RPC. An ordinary
+subscription only matches jobs owned by the subscribing user; privilege is
+resolved once when the subscription is created, since job ownership does not
+change.</p>
+
+<p>Visibility is enforced inside the filter predicate rather than as a screen
+on outgoing messages. A job the client may not see never joins the query's
+membership list, so it produces no snapshot, no update, and no delete &mdash;
+the last of which would otherwise reveal that a job existed and finished.</p>
+
+<h2 id="FIREHOSE">The firehose
+<a class="slurm_link" href="#FIREHOSE"></a>
+</h2>
+
+<p>A cluster in which every interested tool holds its own subscription makes
+the controller pay for all of them. The intended remedy is a sidecar daemon
+that mirrors complete job state once and answers its own downstream clients.</p>
+
+<p>For that, a subscription can be opened as a <b>firehose</b>: it matches
+every job unconditionally and its emit set is every tracked attribute. The emit
+set is derived from the attribute enumeration rather than listed out, so a
+newly tracked attribute joins the firehose automatically &mdash; which is what
+keeps such a mirror complete as Slurm grows. Because it crosses uid boundaries,
+a firehose may only be opened by <b>SlurmUser</b> or root.</p>
+
+<h2 id="EXTENDING">Adding a tracked attribute
+<a class="slurm_link" href="#EXTENDING"></a>
+</h2>
+
+<ol>
+<li>Add an entry at the <i>end</i> of <b>job_subs_attr_t</b> in
+<i>src/common/job_record.h</i>, before JOB_SUBS_ATTR_COUNT. The order is wire
+protocol; existing entries must not be reordered.</li>
+<li>Const-qualify the field in <b>job_record_t</b> and add a setter, then let
+the compiler find the assignments that need converting.</li>
+<li>Pack and unpack the new field, under its mask bit, in the subscription
+event message.</li>
+<li>Add it to the filterable set only if a filter should be able to reference
+it, remembering that a mutable filter attribute puts every change to it on the
+membership-evaluation path.</li>
+</ol>
+
+<p style="text-align:center;">
+Last modified 13 September 2026</p>
+
+<!--#include virtual="footer.txt"-->

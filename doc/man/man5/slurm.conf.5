@@ -6169,6 +6169,17 @@ into this directory.
 .IP
 
 .TP
+\fBSubscriptionTimeout\fR
+The number of seconds a job status subscription is retained after its
+client disconnects, allowing the client to reconnect and resume the
+subscription by presenting the query id it was assigned.
+A reconnecting client is sent a fresh snapshot of every job its query
+matches rather than a replay of what it missed while disconnected.
+Subscriptions not reclaimed within this interval are discarded.
+The default value is 120 seconds.
+.IP
+
+.TP
 \fBSuspendExcNodes\fR
 Specifies the nodes which are to not be placed in power save mode, even
 if the node remains idle for an extended period of time.

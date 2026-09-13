@@ -117,6 +117,7 @@ may be found in the <a href="https://slurm.schedmd.com/archive/">archive</a>.
 <ul>
 <li><a href="gres_design.html">Generic Resource (GRES) Design Guide</a></li>
 <li><a href="job_launch.html">Job Launch Design Guide</a></li>
+<li><a href="job_subscriptions.html">Job Status Subscription Design Guide</a></li>
 <li><a href="select_design.html">Select Plugin Design Guide</a></li>
 </ul>
 </li>

@@ -41,6 +41,7 @@ generated_html = \
 	job_reason_codes.html \
 	job_state_codes.html \
 	job_submit_plugins.html \
+	job_subscriptions.html \
 	jwt.html \
 	kubernetes.html \
 	licenses.html \

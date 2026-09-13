@@ -32,6 +32,8 @@ slurmctld_SOURCES =     \
 	job_state.c	\
 	job_subs.c	\
 	job_subs.h	\
+	job_subs_conn.c	\
+	job_subs_conn.h	\
 	licenses.c	\
 	licenses.h	\
 	locks.c   	\

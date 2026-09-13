@@ -126,6 +126,8 @@
 #include "src/slurmctld/heartbeat.h"
 #include "src/slurmctld/http.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
+#include "src/slurmctld/job_subs_conn.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/ping_nodes.h"
@@ -816,6 +818,8 @@ int main(int argc, char **argv)
 
 	rate_limit_init();
 	rpc_queue_init();
+	job_subs_init();
+	job_subs_conn_init();
 
 	/* Load HTTP switching plugins and handlers */
 	http_switch_init();
@@ -1243,7 +1247,9 @@ int main(int argc, char **argv)
 
 	/* Purge our local data structures */
 	configless_clear();
+	job_subs_conn_fini();
 	job_fini();
+	job_subs_fini();
 	part_fini();	/* part_fini() must precede node_fini() */
 	node_fini();
 	mpi_fini();

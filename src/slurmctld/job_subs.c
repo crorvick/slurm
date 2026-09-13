@@ -510,6 +510,62 @@ extern void job_subs_flush(void)
 	}
 }
 
+typedef struct {
+	job_subs_query_t *query;
+	int matched;
+} bind_args_t;
+
+static int _bind_job(void *x, void *arg)
+{
+	job_record_t *job_ptr = x;
+	bind_args_t *bind = arg;
+
+	if (!job_subs_query_match(bind->query, job_ptr))
+		return 0;
+
+	job_subs_member_add(job_ptr, bind->query->query_id);
+	_send_event(bind->query, MESSAGE_JOB_SNAPSHOT, job_ptr,
+		    bind->query->emit_mask);
+	bind->matched++;
+
+	return 0;
+}
+
+extern int job_subs_query_bind(uint32_t query_id)
+{
+	bind_args_t bind = { .query = job_subs_query_find(query_id) };
+
+	xassert(verify_lock(JOB_LOCK, WRITE_LOCK));
+
+	if (!bind.query)
+		return -1;
+
+	if (job_list)
+		list_for_each(job_list, _bind_job, &bind);
+
+	return bind.matched;
+}
+
+extern void job_subs_query_attached(uint32_t query_id)
+{
+	job_subs_query_t *query = job_subs_query_find(query_id);
+
+	xassert(verify_lock(JOB_LOCK, WRITE_LOCK));
+
+	if (query)
+		query->disconnect_time = 0;
+}
+
+extern void job_subs_query_disconnected(uint32_t query_id)
+{
+	job_subs_query_t *query = job_subs_query_find(query_id);
+
+	xassert(verify_lock(JOB_LOCK, WRITE_LOCK));
+
+	if (query)
+		query->disconnect_time = time(NULL);
+}
+
 extern void job_subs_job_created(job_record_t *job_ptr)
 {
 	if (!modified_jobs)	/* subscriptions not initialized */

@@ -103,6 +103,7 @@
 #include "src/slurmctld/gang.h"
 #include "src/slurmctld/job_scheduler.h"
 #include "src/slurmctld/job_subs.h"
+#include "src/slurmctld/job_subs_conn.h"
 #include "src/slurmctld/licenses.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
@@ -6309,6 +6310,60 @@ static int _process_persist_conn(void *arg, persist_msg_t *persist_msg,
 	return SLURM_SUCCESS;
 }
 
+/*
+ * Open a job status subscription: register the query, adopt the (already
+ * extracted) connection for streaming, and send the snapshot burst. The
+ * RPC is marked keep_msg, so every path out of here owns msg and its
+ * connection.
+ */
+static void _slurm_rpc_job_subscribe(slurm_msg_t *msg)
+{
+	job_subscribe_msg_t *req = msg->data;
+	slurmctld_lock_t job_write_lock = {
+		.job = WRITE_LOCK,
+	};
+	uint32_t query_id;
+	int rc = SLURM_SUCCESS;
+
+	xassert(msg->conn);
+
+	if (req->query_id != NO_VAL) {
+		/* reattach support arrives with the timeout handling */
+		rc = EINVAL;
+	} else if (!req->job_ids_cnt || (req->job_ids_cnt > 65536)) {
+		rc = EINVAL;
+	} else if (!req->emit_mask || (req->emit_mask & ~JOB_SUBS_ALL)) {
+		rc = EINVAL;
+	}
+
+	if (rc) {
+		slurm_send_rc_msg(msg, rc);
+		FREE_NULL_CONN(msg->conn);
+		FREE_NULL_MSG(msg);
+		return;
+	}
+
+	lock_slurmctld(job_write_lock);
+	query_id = job_subs_query_create(req->job_ids, req->job_ids_cnt,
+					 req->emit_mask, msg->auth_uid);
+	unlock_slurmctld(job_write_lock);
+
+	debug2("%s: uid %u subscribed query %u over %u job ids",
+	       __func__, msg->auth_uid, query_id, req->job_ids_cnt);
+
+	/* consumes msg and its connection; sends RESPONSE_JOB_SUBSCRIBE */
+	rc = job_subs_conn_attach(msg, query_id);
+
+	lock_slurmctld(job_write_lock);
+	if (rc) {
+		job_subs_query_disconnected(query_id);
+	} else {
+		job_subs_query_attached(query_id);
+		job_subs_query_bind(query_id);
+	}
+	unlock_slurmctld(job_write_lock);
+}
+
 static void _slurm_rpc_persist_init(slurm_msg_t *msg)
 {
 	int rc = SLURM_SUCCESS, fd = -1, rc_msg = EINVAL;
@@ -7298,6 +7353,10 @@ slurmctld_rpc_t slurmctld_rpcs[] =
 	},{
 		.msg_type = REQUEST_PERSIST_INIT,
 		.func = _slurm_rpc_persist_init,
+		.keep_msg = true,
+	},{
+		.msg_type = REQUEST_JOB_SUBSCRIBE,
+		.func = _slurm_rpc_job_subscribe,
 		.keep_msg = true,
 	},{
 		.msg_type = REQUEST_SET_FS_DAMPENING_FACTOR,

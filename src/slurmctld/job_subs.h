@@ -156,6 +156,24 @@ extern bool job_subs_query_delete(uint32_t query_id);
 /* Number of registered queries. */
 extern int job_subs_query_count(void);
 
+/*
+ * Send the snapshot burst for a query: every job in job_list matching the
+ * filter is added to the membership list (idempotent) and snapshotted with
+ * the query's emit set. Used both at initial bind and on reattach, where
+ * a fresh snapshot replaces any missed traffic. Returns the number of
+ * jobs snapshotted, or -1 if the query id is unknown. Caller must hold
+ * the job write lock.
+ */
+extern int job_subs_query_bind(uint32_t query_id);
+
+/*
+ * Connection-state markers: a query with a live connection has
+ * disconnect_time zero; a disconnected query keeps its timestamp so the
+ * pruning sweep can expire it. Caller must hold the job write lock.
+ */
+extern void job_subs_query_attached(uint32_t query_id);
+extern void job_subs_query_disconnected(uint32_t query_id);
+
 /* True if the job satisfies the query's filter predicate. */
 extern bool job_subs_query_match(job_subs_query_t *query,
 				 job_record_t *job_ptr);

@@ -516,6 +516,9 @@ struct job_record {
 	list_t *steps_drained_subs; /* list of steps-drained subscribers
 				     * (steps_drained_sub_t); only populated in
 				     * stepmgr. DON'T PACK */
+	struct job_subs_track *subs;	/* job status subscription tracking,
+					 * owned by slurmctld job_subs.c.
+					 * DON'T PACK */
 	time_t suspend_time;		/* time job last suspended or resumed */
 	void *switch_jobinfo;		/* opaque blob for switch plugin */
 	char *system_comment;		/* slurmctld's arbitrary comment */

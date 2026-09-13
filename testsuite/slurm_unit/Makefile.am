@@ -1,3 +1,3 @@
 AUTOMAKE_OPTIONS = foreign
 
-SUBDIRS = backfill common topology topology_frag
+SUBDIRS = backfill common job_subs topology topology_frag

@@ -70,6 +70,7 @@
 
 #include "src/slurmctld/agent.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
 #include "src/slurmctld/slurmctld.h"
@@ -680,7 +681,7 @@ static bb_job_t *_get_bb_job(job_record_t *job_ptr)
 		xstrfmtcat(job_ptr->state_desc,
 			   "%s: Invalid burst buffer spec (%s)",
 			   plugin_type, job_ptr->burst_buffer);
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 		info("Invalid burst buffer spec for %pJ (%s)",
 		     job_ptr, job_ptr->burst_buffer);
 		bb_job_del(&bb_state, job_ptr->job_id);
@@ -1519,7 +1520,7 @@ static void *_start_stage_in(void *x)
 		job_ptr->state_reason = FAIL_BURST_BUFFER_OP;
 		xstrfmtcat(job_ptr->state_desc, "%s: %s: %s",
 			   plugin_type, op, resp_msg);
-		job_ptr->priority = 0;	/* Hold job */
+		job_subs_set_priority(job_ptr, 0);	/* Hold job */
 		bb_alloc = bb_find_alloc_rec(&bb_state, job_ptr);
 		if (bb_alloc) {
 			bb_alloc->state_time = time(NULL);
@@ -3588,11 +3589,11 @@ fini:
 static void _kill_job(job_record_t *job_ptr, bool hold_job)
 {
 	last_job_update = time(NULL);
-	job_ptr->end_time = last_job_update;
+	job_subs_set_end_time(job_ptr, last_job_update);
 	if (hold_job)
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 	build_cg_bitmap(job_ptr);
-	job_ptr->exit_code = 1;
+	job_subs_set_exit_code(job_ptr, 1);
 	job_ptr->state_reason = FAIL_BURST_BUFFER_OP;
 	xfree(job_ptr->state_desc);
 	job_ptr->state_desc = xstrdup("Burst buffer pre_run error");
@@ -3981,7 +3982,7 @@ static int _create_bufs(job_record_t *job_ptr, bb_job_t *bb_job,
 				info("Attempt by %pJ user %u to create duplicate persistent burst buffer named %s and currently owned by user %u",
 				      job_ptr, job_ptr->user_id,
 				      buf_ptr->name, bb_alloc->user_id);
-				job_ptr->priority = 0;
+				job_subs_set_priority(job_ptr, 0);
 				job_ptr->state_reason = FAIL_BURST_BUFFER_OP;
 				xfree(job_ptr->state_desc);
 				job_ptr->state_desc = xstrdup(
@@ -4050,7 +4051,7 @@ static int _create_bufs(job_record_t *job_ptr, bb_job_t *bb_job,
 					   "%s: Delete buffer %s permission "
 					   "denied",
 					   plugin_type, buf_ptr->name);
-				job_ptr->priority = 0;  /* Hold job */
+				job_subs_set_priority(job_ptr, 0); /* Hold job */
 				continue;
 			}
 
@@ -4280,7 +4281,7 @@ static void *_create_persistent(void *x)
 			      create_args->job_id);
 		} else {
 			job_ptr->state_reason = FAIL_BAD_CONSTRAINTS;
-			job_ptr->priority = 0;
+			job_subs_set_priority(job_ptr, 0);
 			xfree(job_ptr->state_desc);
 			xstrfmtcat(job_ptr->state_desc, "%s",
 				   resp_msg);

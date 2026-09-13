@@ -60,6 +60,7 @@
 
 #include "src/slurmctld/agent.h"
 #include "src/slurmctld/job_scheduler.h"
+#include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/node_scheduler.h"
 #include "src/slurmctld/slurmctld.h"
@@ -1569,7 +1570,7 @@ static void _fail_stage(stage_args_t *stage_args, const char *op,
 	}
 
 	bb_update_system_comment(job_ptr, (char *) op, resp_msg, 0);
-	job_ptr->priority = 0; /* Hold job */
+	job_subs_set_priority(job_ptr, 0); /* Hold job */
 	_set_job_state_desc(job_ptr, FAIL_BURST_BUFFER_OP,
 			    "%s failed: %s", op, resp_msg);
 	if (bb_state.bb_config.flags & BB_FLAG_TEARDOWN_FAILURE) {
@@ -2087,7 +2088,7 @@ static bb_job_t *_get_bb_job(job_record_t *job_ptr)
 	xfree(bb_specs);
 
 	if (!have_bb) {
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 		_set_job_state_desc(job_ptr, FAIL_BURST_BUFFER_OP,
 				    "Invalid burst buffer spec (%s)");
 		info("Invalid burst buffer spec for %pJ (%s)",
@@ -3596,11 +3597,11 @@ fini:	xfree(data_buf);
 static void _kill_job(job_record_t *job_ptr, bool hold_job, char *resp_msg)
 {
 	last_job_update = time(NULL);
-	job_ptr->end_time = last_job_update;
+	job_subs_set_end_time(job_ptr, last_job_update);
 	if (hold_job)
-		job_ptr->priority = 0;
+		job_subs_set_priority(job_ptr, 0);
 	build_cg_bitmap(job_ptr);
-	job_ptr->exit_code = 1;
+	job_subs_set_exit_code(job_ptr, 1);
 	_set_job_state_desc(job_ptr, FAIL_BURST_BUFFER_OP,
 			    "%s failed: %s", req_fxns[SLURM_BB_PRE_RUN],
 			    resp_msg);

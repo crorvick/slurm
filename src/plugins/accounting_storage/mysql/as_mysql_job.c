@@ -1278,7 +1278,8 @@ extern int as_mysql_job_complete(mysql_conn_t *mysql_conn,
 				error("%s: We are trying to end a job (%u) with no end time, setting it to the start time (%ld) of the job.",
 				      __func__,
 				      job_ptr->job_id, job_ptr->start_time);
-				job_ptr->end_time = job_ptr->start_time;
+				job_record_init_end_time(
+					job_ptr, job_ptr->start_time);
 			} else {
 				error("%s: job %u never started",
 				      __func__, job_ptr->job_id);

@@ -46,6 +46,9 @@
 
 static slurmctld_lock_t job_write_lock = { .job = WRITE_LOCK };
 
+/* referenced by job_subs_query_delete(); the tests populate it */
+list_t *job_list = NULL;
+
 START_TEST(test_dirty_bits)
 {
 	job_record_t *job1, *job2;
@@ -274,6 +277,83 @@ START_TEST(test_flush_consumer)
 }
 END_TEST
 
+START_TEST(test_query_registry)
+{
+	uint32_t ids[] = { 30, 10, 20 };	/* deliberately unsorted */
+	uint32_t qid1, qid2;
+	job_subs_query_t *query;
+	job_record_t *job_ptr;
+
+	job_subs_init();
+	job_ptr = job_record_create();
+
+	qid1 = job_subs_query_create(ids, 3,
+				     JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE), 1001);
+	qid2 = job_subs_query_create(NULL, 0, JOB_SUBS_ALL, 1002);
+	ck_assert(qid1 != qid2);
+	ck_assert_int_eq(job_subs_query_count(), 2);
+
+	query = job_subs_query_find(qid1);
+	ck_assert(query != NULL);
+	ck_assert_int_eq(query->query_id, qid1);
+	ck_assert(query->uid == 1001);
+
+	/* the filter ids were copied and sorted */
+	ck_assert_int_eq(query->job_ids_cnt, 3);
+	ck_assert_int_eq(query->job_ids[0], 10);
+	ck_assert_int_eq(query->job_ids[1], 20);
+	ck_assert_int_eq(query->job_ids[2], 30);
+	ck_assert(query->filter_mask == JOB_SUBS_BIT(JOB_SUBS_ATTR_JOB_ID));
+
+	/* predicate: job id membership */
+	job_ptr->job_id = 20;
+	ck_assert(job_subs_query_match(query, job_ptr));
+	job_ptr->job_id = 21;
+	ck_assert(!job_subs_query_match(query, job_ptr));
+
+	/* an empty filter matches nothing... */
+	query = job_subs_query_find(qid2);
+	ck_assert(query->filter_mask == 0);
+	ck_assert(!job_subs_query_match(query, job_ptr));
+
+	/* ...unless it is the firehose, which matches everything */
+	query->firehose = true;
+	ck_assert(job_subs_query_match(query, job_ptr));
+
+	ck_assert(job_subs_query_find(9999) == NULL);
+	ck_assert(!job_subs_query_delete(9999));
+
+	job_subs_fini();
+}
+END_TEST
+
+START_TEST(test_query_delete_drops_memberships)
+{
+	uint32_t ids[] = { 5 };
+	uint32_t qid;
+	job_record_t *job_ptr;
+
+	job_subs_init();
+	job_list = list_create(NULL);
+	job_ptr = job_record_create();
+	job_ptr->job_id = 5;
+	list_append(job_list, job_ptr);
+
+	qid = job_subs_query_create(ids, 1, JOB_SUBS_ALL, 0);
+	ck_assert(job_subs_member_add(job_ptr, qid));
+	ck_assert(job_subs_member_test(job_ptr, qid));
+
+	ck_assert(job_subs_query_delete(qid));
+	ck_assert(!job_subs_member_test(job_ptr, qid));
+	ck_assert(job_subs_query_find(qid) == NULL);
+	ck_assert_int_eq(job_subs_query_count(), 0);
+
+	job_subs_detach(job_ptr);
+	FREE_NULL_LIST(job_list);
+	job_subs_fini();
+}
+END_TEST
+
 START_TEST(test_dirty_before_init)
 {
 	job_record_t *job_ptr = job_record_create();
@@ -304,6 +384,8 @@ int main(void)
 	tcase_add_test(tc, test_membership);
 	tcase_add_test(tc, test_setters_detect_change);
 	tcase_add_test(tc, test_flush_consumer);
+	tcase_add_test(tc, test_query_registry);
+	tcase_add_test(tc, test_query_delete_drops_memberships);
 	tcase_add_test(tc, test_dirty_before_init);
 	suite_add_tcase(s, tc);
 

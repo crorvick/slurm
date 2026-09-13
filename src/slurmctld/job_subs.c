@@ -38,8 +38,11 @@
 #include "src/common/xassert.h"
 #include "src/common/xmalloc.h"
 
+#include <stdlib.h>
+
 #include "src/slurmctld/job_subs.h"
 #include "src/slurmctld/locks.h"
+#include "src/slurmctld/slurmctld.h"
 
 /*
  * Jobs with at least one dirty bit set since the last flush. A job is on
@@ -49,15 +52,29 @@
  */
 static list_t *modified_jobs = NULL;
 
+/* Registered queries; expected to stay small enough for a plain list. */
+static list_t *queries = NULL;
+static uint32_t next_query_id = 1;
+
+static void _query_free(void *x)
+{
+	job_subs_query_t *query = x;
+
+	xfree(query->job_ids);
+	xfree(query);
+}
+
 extern void job_subs_init(void)
 {
 	xassert(!modified_jobs);
 	modified_jobs = list_create(NULL);
+	queries = list_create(_query_free);
 }
 
 extern void job_subs_fini(void)
 {
 	FREE_NULL_LIST(modified_jobs);
+	FREE_NULL_LIST(queries);
 }
 
 extern job_subs_track_t *job_subs_track(job_record_t *job_ptr)
@@ -200,6 +217,104 @@ extern bool job_subs_member_test(job_record_t *job_ptr, uint32_t query_id)
 static int _match_job(void *x, void *key)
 {
 	return (x == key);
+}
+
+static int _cmp_job_id(const void *a, const void *b)
+{
+	uint32_t ia = *(const uint32_t *) a, ib = *(const uint32_t *) b;
+
+	return (ia > ib) - (ia < ib);
+}
+
+extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
+				      job_subs_mask_t emit_mask, uid_t uid)
+{
+	job_subs_query_t *query = xmalloc(sizeof(*query));
+
+	xassert(queries);
+
+	/*
+	 * Monotonic id assignment; NO_VAL is the "no query yet" sentinel
+	 * on the wire so skip over it if the counter ever gets there.
+	 */
+	if (next_query_id == NO_VAL)
+		next_query_id = 1;
+	query->query_id = next_query_id++;
+
+	if (cnt) {
+		query->job_ids = xcalloc(cnt, sizeof(*query->job_ids));
+		memcpy(query->job_ids, job_ids,
+		       cnt * sizeof(*query->job_ids));
+		qsort(query->job_ids, cnt, sizeof(*query->job_ids),
+		      _cmp_job_id);
+		query->job_ids_cnt = cnt;
+		query->filter_mask = JOB_SUBS_BIT(JOB_SUBS_ATTR_JOB_ID);
+	}
+	query->emit_mask = emit_mask;
+	query->uid = uid;
+
+	list_append(queries, query);
+
+	return query->query_id;
+}
+
+static int _match_query_id(void *x, void *key)
+{
+	job_subs_query_t *query = x;
+
+	return (query->query_id == *(uint32_t *) key);
+}
+
+extern job_subs_query_t *job_subs_query_find(uint32_t query_id)
+{
+	if (!queries)
+		return NULL;
+
+	return list_find_first(queries, _match_query_id, &query_id);
+}
+
+static int _drop_membership(void *x, void *arg)
+{
+	job_subs_member_del(x, *(uint32_t *) arg);
+
+	return 0;
+}
+
+extern bool job_subs_query_delete(uint32_t query_id)
+{
+	job_subs_query_t *query;
+
+	if (!queries)
+		return false;
+
+	query = list_remove_first(queries, _match_query_id, &query_id);
+	if (!query)
+		return false;
+
+	if (job_list)
+		list_for_each(job_list, _drop_membership, &query_id);
+
+	_query_free(query);
+
+	return true;
+}
+
+extern int job_subs_query_count(void)
+{
+	return queries ? list_count(queries) : 0;
+}
+
+extern bool job_subs_query_match(job_subs_query_t *query,
+				 job_record_t *job_ptr)
+{
+	if (query->firehose)
+		return true;
+
+	if (!query->job_ids_cnt)
+		return false;
+
+	return bsearch(&job_ptr->job_id, query->job_ids, query->job_ids_cnt,
+		       sizeof(*query->job_ids), _cmp_job_id) != NULL;
 }
 
 static job_subs_flush_fn_t flush_fn = NULL;

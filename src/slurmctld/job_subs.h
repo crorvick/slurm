@@ -103,6 +103,49 @@ extern bool job_subs_member_test(job_record_t *job_ptr, uint32_t query_id);
 extern void job_subs_detach(job_record_t *job_ptr);
 
 /*
+ * A registered query: a filter predicate over jobs plus the set of
+ * attributes whose changes stream to the subscriber. The predicate is
+ * job-id membership today, but the filter mask records which attribute
+ * bits require re-running it, so mutable filter attributes (partition,
+ * account, ...) can be added without reshaping the flush pass.
+ */
+typedef struct {
+	uint32_t query_id;	/* server-assigned, returned on subscribe */
+	uint32_t *job_ids;	/* filter: sorted job ids to match */
+	uint32_t job_ids_cnt;	/* count of job_ids[] */
+	bool firehose;		/* match every job, ignore the filter */
+	job_subs_mask_t filter_mask; /* dirty bits forcing predicate re-run */
+	job_subs_mask_t emit_mask;   /* dirty bits producing an update */
+	uid_t uid;		/* subscriber, for visibility scoping */
+	time_t disconnect_time;	/* 0 while attached; set on disconnect so
+				 * stale queries can be pruned */
+} job_subs_query_t;
+
+/*
+ * Register a new query over the given job ids (copied) and emit set.
+ * Returns the assigned query id. Membership binding and the snapshot
+ * burst are driven by the caller via job_subs_query_bind().
+ */
+extern uint32_t job_subs_query_create(const uint32_t *job_ids, uint32_t cnt,
+				      job_subs_mask_t emit_mask, uid_t uid);
+
+/* The registered query, or NULL. */
+extern job_subs_query_t *job_subs_query_find(uint32_t query_id);
+
+/*
+ * Unregister a query and remove it from every job's membership list.
+ * Returns false if the id is unknown.
+ */
+extern bool job_subs_query_delete(uint32_t query_id);
+
+/* Number of registered queries. */
+extern int job_subs_query_count(void);
+
+/* True if the job satisfies the query's filter predicate. */
+extern bool job_subs_query_match(job_subs_query_t *query,
+				 job_record_t *job_ptr);
+
+/*
  * Consumer for the flush pass, called once per modified job with the
  * job's accumulated dirty mask, while the job write lock is still held.
  * Query evaluation plugs in here; tests install a capturing consumer.

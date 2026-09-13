@@ -41,37 +41,10 @@
 #include "src/common/job_record.h"
 
 /*
- * The attributes a job status subscription can track. Every attribute may
- * appear in a query's emit set; only those in JOB_SUBS_FILTERABLE may be
- * referenced by a filter predicate.
- *
- * The order is part of the wire protocol once the subscription RPCs exist:
- * add new attributes at the end, before JOB_SUBS_ATTR_COUNT.
+ * The trackable-attribute enum (job_subs_attr_t) and its mask macros live
+ * in src/common/job_record.h beside the fields they describe, since the
+ * protocol pack code needs them too.
  */
-typedef enum {
-	JOB_SUBS_ATTR_JOB_ID = 0,
-	JOB_SUBS_ATTR_STATE,
-	JOB_SUBS_ATTR_PRIORITY,
-	JOB_SUBS_ATTR_PARTITION,
-	JOB_SUBS_ATTR_NODES,
-	JOB_SUBS_ATTR_START_TIME,
-	JOB_SUBS_ATTR_END_TIME,
-	JOB_SUBS_ATTR_EXIT_CODE,
-	JOB_SUBS_ATTR_COUNT
-} job_subs_attr_t;
-
-typedef uint64_t job_subs_mask_t;
-
-#define JOB_SUBS_BIT(attr) ((job_subs_mask_t) 1 << (attr))
-#define JOB_SUBS_ALL (JOB_SUBS_BIT(JOB_SUBS_ATTR_COUNT) - 1)
-
-/*
- * Attributes a filter predicate may reference. Job id is immutable so
- * membership never needs re-evaluation today, but the flush pass must not
- * assume this: future filterable attributes (partition, account, ...) are
- * mutable.
- */
-#define JOB_SUBS_FILTERABLE JOB_SUBS_BIT(JOB_SUBS_ATTR_JOB_ID)
 
 /*
  * Per-job subscription tracking state, hung off job_record_t->subs and

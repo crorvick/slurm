@@ -49,6 +49,7 @@
 #include "src/common/cron.h"
 #include "src/common/fetch_config.h"
 #include "src/common/forward.h"
+#include "src/common/job_record.h"
 #include "src/common/job_options.h"
 #include "src/common/log.h"
 #include "src/common/pack.h"
@@ -10973,6 +10974,124 @@ unpack_error:
 	return SLURM_ERROR;
 }
 
+static void _pack_job_subscribe_msg(const slurm_msg_t *smsg, buf_t *buffer)
+{
+	job_subscribe_msg_t *msg = smsg->data;
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		pack32(msg->query_id, buffer);
+		pack64(msg->emit_mask, buffer);
+		pack32_array(msg->job_ids, msg->job_ids_cnt, buffer);
+	}
+}
+
+static int _unpack_job_subscribe_msg(slurm_msg_t *smsg, buf_t *buffer)
+{
+	job_subscribe_msg_t *msg = xmalloc(sizeof(*msg));
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		safe_unpack32(&msg->query_id, buffer);
+		safe_unpack64(&msg->emit_mask, buffer);
+		safe_unpack32_array(&msg->job_ids, &msg->job_ids_cnt, buffer);
+	}
+
+	smsg->data = msg;
+	return SLURM_SUCCESS;
+
+unpack_error:
+	slurm_free_job_subscribe_msg(msg);
+	return SLURM_ERROR;
+}
+
+static void _pack_job_subscribe_response_msg(const slurm_msg_t *smsg,
+					     buf_t *buffer)
+{
+	job_subscribe_response_msg_t *msg = smsg->data;
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		pack32(msg->query_id, buffer);
+	}
+}
+
+static int _unpack_job_subscribe_response_msg(slurm_msg_t *smsg,
+					      buf_t *buffer)
+{
+	job_subscribe_response_msg_t *msg = xmalloc(sizeof(*msg));
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		safe_unpack32(&msg->query_id, buffer);
+	}
+
+	smsg->data = msg;
+	return SLURM_SUCCESS;
+
+unpack_error:
+	xfree(msg);
+	return SLURM_ERROR;
+}
+
+/*
+ * Attribute values ride behind attr_mask in job_subs_attr_t enum order, so
+ * a receiver built without some newer attribute still unpacks everything
+ * it knows about and an emitter never sends fields the mask doesn't name.
+ */
+static void _pack_job_subs_event_msg(const slurm_msg_t *smsg, buf_t *buffer)
+{
+	job_subs_event_msg_t *msg = smsg->data;
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		pack32(msg->query_id, buffer);
+		pack32(msg->job_id, buffer);
+		pack64(msg->attr_mask, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE))
+			pack32(msg->job_state, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY))
+			pack32(msg->priority, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PARTITION))
+			packstr(msg->partition, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_NODES))
+			packstr(msg->nodes, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME))
+			pack_time(msg->start_time, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME))
+			pack_time(msg->end_time, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE))
+			pack32(msg->exit_code, buffer);
+	}
+}
+
+static int _unpack_job_subs_event_msg(slurm_msg_t *smsg, buf_t *buffer)
+{
+	job_subs_event_msg_t *msg = xmalloc(sizeof(*msg));
+
+	if (smsg->protocol_version >= SLURM_26_05_PROTOCOL_VERSION) {
+		safe_unpack32(&msg->query_id, buffer);
+		safe_unpack32(&msg->job_id, buffer);
+		safe_unpack64(&msg->attr_mask, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_STATE))
+			safe_unpack32(&msg->job_state, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PRIORITY))
+			safe_unpack32(&msg->priority, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_PARTITION))
+			safe_unpackstr(&msg->partition, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_NODES))
+			safe_unpackstr(&msg->nodes, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_START_TIME))
+			safe_unpack_time(&msg->start_time, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_END_TIME))
+			safe_unpack_time(&msg->end_time, buffer);
+		if (msg->attr_mask & JOB_SUBS_BIT(JOB_SUBS_ATTR_EXIT_CODE))
+			safe_unpack32(&msg->exit_code, buffer);
+	}
+
+	smsg->data = msg;
+	return SLURM_SUCCESS;
+
+unpack_error:
+	slurm_free_job_subs_event_msg(msg);
+	return SLURM_ERROR;
+}
+
 static void _pack_node_info_request_msg(const slurm_msg_t *smsg, buf_t *buffer)
 {
 	node_info_request_msg_t *msg = smsg->data;
@@ -14657,6 +14776,17 @@ pack_msg(slurm_msg_t *msg, buf_t *buffer)
 	case REQUEST_STEPS_DRAINED_SUBSCRIBE:
 		_pack_steps_drained_sub_msg(msg, buffer);
 		break;
+	case REQUEST_JOB_SUBSCRIBE:
+		_pack_job_subscribe_msg(msg, buffer);
+		break;
+	case RESPONSE_JOB_SUBSCRIBE:
+		_pack_job_subscribe_response_msg(msg, buffer);
+		break;
+	case MESSAGE_JOB_SNAPSHOT:
+	case MESSAGE_JOB_UPDATE:
+	case MESSAGE_JOB_DELETE:
+		_pack_job_subs_event_msg(msg, buffer);
+		break;
 	case RESPONSE_STEP_LAYOUT:
 		pack_slurm_step_layout((slurm_step_layout_t *)msg->data,
 				       buffer,
@@ -15190,6 +15320,17 @@ unpack_msg(slurm_msg_t * msg, buf_t *buffer)
 		break;
 	case REQUEST_STEPS_DRAINED_SUBSCRIBE:
 		rc = _unpack_steps_drained_sub_msg(msg, buffer);
+		break;
+	case REQUEST_JOB_SUBSCRIBE:
+		rc = _unpack_job_subscribe_msg(msg, buffer);
+		break;
+	case RESPONSE_JOB_SUBSCRIBE:
+		rc = _unpack_job_subscribe_response_msg(msg, buffer);
+		break;
+	case MESSAGE_JOB_SNAPSHOT:
+	case MESSAGE_JOB_UPDATE:
+	case MESSAGE_JOB_DELETE:
+		rc = _unpack_job_subs_event_msg(msg, buffer);
 		break;
 	case RESPONSE_STEP_LAYOUT:
 		rc = unpack_slurm_step_layout(

@@ -515,6 +515,37 @@ typedef struct steps_drained_sub_msg {
 	char *tls_cert; /* self-signed PEM cert, or NULL */
 } steps_drained_sub_msg_t;
 
+typedef struct job_subscribe_msg {
+	uint32_t query_id;	/* NO_VAL to open a new query, or a
+				 * previously assigned id to reattach */
+	uint64_t emit_mask;	/* JOB_SUBS_BIT() set of attributes whose
+				 * changes should be streamed */
+	uint32_t *job_ids;	/* filter: job ids to match */
+	uint32_t job_ids_cnt;	/* count of job_ids[] */
+} job_subscribe_msg_t;
+
+typedef struct job_subscribe_response_msg {
+	uint32_t query_id;	/* server-assigned; persist for reattach */
+} job_subscribe_response_msg_t;
+
+/*
+ * Payload of MESSAGE_JOB_SNAPSHOT, MESSAGE_JOB_UPDATE and
+ * MESSAGE_JOB_DELETE. attr_mask says which attribute fields below carry a
+ * value; a delete carries none.
+ */
+typedef struct job_subs_event_msg {
+	uint32_t query_id;
+	uint32_t job_id;
+	uint64_t attr_mask;	/* JOB_SUBS_BIT() set of valid fields */
+	uint32_t job_state;
+	uint32_t priority;
+	char *partition;
+	char *nodes;
+	time_t start_time;
+	time_t end_time;
+	uint32_t exit_code;
+} job_subs_event_msg_t;
+
 typedef struct complete_job_allocation {
 	uint32_t job_rc;
 	slurm_step_id_t step_id;
@@ -1716,6 +1747,8 @@ extern void slurm_free_srun_step_missing_msg(srun_step_missing_msg_t * msg);
 extern void slurm_free_srun_timeout_msg(srun_timeout_msg_t * msg);
 extern void slurm_free_srun_user_msg(srun_user_msg_t * msg);
 extern void slurm_free_steps_drained_sub_msg(steps_drained_sub_msg_t *msg);
+extern void slurm_free_job_subscribe_msg(job_subscribe_msg_t *msg);
+extern void slurm_free_job_subs_event_msg(job_subs_event_msg_t *msg);
 extern void slurm_free_suspend_msg(suspend_msg_t *msg);
 extern void slurm_free_suspend_int_msg(suspend_int_msg_t *msg);
 extern void slurm_free_top_job_msg(top_job_msg_t *msg);

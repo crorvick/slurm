@@ -2479,6 +2479,23 @@ extern void slurm_free_steps_drained_sub_msg(steps_drained_sub_msg_t *msg)
 	}
 }
 
+extern void slurm_free_job_subscribe_msg(job_subscribe_msg_t *msg)
+{
+	if (msg) {
+		xfree(msg->job_ids);
+		xfree(msg);
+	}
+}
+
+extern void slurm_free_job_subs_event_msg(job_subs_event_msg_t *msg)
+{
+	if (msg) {
+		xfree(msg->partition);
+		xfree(msg->nodes);
+		xfree(msg);
+	}
+}
+
 extern void slurm_free_suspend_msg(suspend_msg_t *msg)
 {
 	if (msg) {
@@ -5526,6 +5543,18 @@ extern void slurm_free_msg_data(slurm_msg_type_t type, void *data)
 		break;
 	case REQUEST_STEPS_DRAINED_SUBSCRIBE:
 		slurm_free_steps_drained_sub_msg(data);
+		break;
+	case REQUEST_JOB_SUBSCRIBE:
+		slurm_free_job_subscribe_msg(data);
+		break;
+	case RESPONSE_JOB_SUBSCRIBE:
+		/* single fixed-size struct */
+		xfree(data);
+		break;
+	case MESSAGE_JOB_SNAPSHOT:
+	case MESSAGE_JOB_UPDATE:
+	case MESSAGE_JOB_DELETE:
+		slurm_free_job_subs_event_msg(data);
 		break;
 	case SRUN_PING:
 		slurm_free_srun_ping_msg(data);
